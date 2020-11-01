@@ -3,6 +3,13 @@
 ![Block diagram of Clairvoyance](tutorial/figure/clairvoyance_logo.png)
 
 Authors: ML-AIM (www.vanderschaar-lab.com)
+- Jinsung Yoon (jsyoon0823@gmail.com)
+- Daniel Jarrett (daniel.jarrett@maths.cam.ac.uk)
+- Ioana Bica (ioana.bica95@gmail.com)
+- Zhaozhi Quan (qianzhaozhi2009@gmail.com)
+
+Reference link: vanderschaar-lab.com/clairvoyance-alpha-the-first-unified-end-to-end-automl-pipeline-for-time-series-data/
+
 
 This directory contains implementations of Clairvoyance: a unified, end-to-end AutoML 
 pipeline for medical time series for the following applications.
