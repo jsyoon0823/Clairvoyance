@@ -1,0 +1,442 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>prediction.general_rnn &mdash; Clairvoyance 0.1.dev0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> Clairvoyance
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1.dev0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">First steps</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/install.html">Installation guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/tutorial.html">Clairvoyance Tutorial</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Full API reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">Clairvoyance</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Clairvoyance</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>prediction.general_rnn</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for prediction.general_rnn</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;General RNN blocks.</span>
+
+<span class="sd">- RNN blocks for classification and regression.</span>
+<span class="sd">(1) Variations:</span>
+<span class="sd">  - Different model: Simple RNN, GRU, LSTM</span>
+<span class="sd">  - Deep networks: n_layer</span>
+<span class="sd">  - Regularization: Save the best model</span>
+<span class="sd">  </span>
+<span class="sd">(2) Dynamic RNN</span>
+<span class="sd">  - Handle different length of sequences using masking and padding</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Necessary packages</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="k">import</span> <span class="n">datetime</span>
+<span class="kn">from</span> <span class="nn">tensorflow.keras</span> <span class="k">import</span> <span class="n">layers</span>
+<span class="kn">from</span> <span class="nn">keras.callbacks</span> <span class="k">import</span> <span class="n">ModelCheckpoint</span>
+<span class="kn">from</span> <span class="nn">utils</span> <span class="k">import</span> <span class="n">binary_cross_entropy_loss</span><span class="p">,</span> <span class="n">mse_loss</span><span class="p">,</span> <span class="n">rnn_sequential</span>
+<span class="kn">from</span> <span class="nn">base</span> <span class="k">import</span> <span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">PredictorMixin</span>
+
+
+<div class="viewcode-block" id="GeneralRNN"><a class="viewcode-back" href="../../api.html#prediction.GeneralRNN">[docs]</a><span class="k">class</span> <span class="nc">GeneralRNN</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">PredictorMixin</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;RNN predictive model to time-series.</span>
+<span class="sd">  </span>
+<span class="sd">  Attributes:</span>
+<span class="sd">    - task: classification or regression</span>
+<span class="sd">    - model_type: &#39;rnn&#39;, &#39;lstm&#39;, or &#39;gru&#39;</span>
+<span class="sd">    - h_dim: hidden dimensions</span>
+<span class="sd">    - n_layer: the number of layers</span>
+<span class="sd">    - batch_size: the number of samples in each batch</span>
+<span class="sd">    - epoch: the number of iteration epochs</span>
+<span class="sd">    - static_mode: &#39;concatenate&#39; or None</span>
+<span class="sd">    - time_mode: &#39;concatenate&#39; or None</span>
+<span class="sd">    - model_id: the name of model</span>
+<span class="sd">    - model_path: model path for saving</span>
+<span class="sd">    - verbose: print intermediate process</span>
+<span class="sd">  &quot;&quot;&quot;</span>
+
+  <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+               <span class="n">task</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">model_type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">model_type_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">h_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">n_layer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">epoch</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">learning_rate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">static_mode</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">time_mode</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">model_id</span><span class="o">=</span><span class="s1">&#39;general_rnn_model&#39;</span><span class="p">,</span>
+               <span class="n">model_path</span><span class="o">=</span><span class="s1">&#39;tmp&#39;</span><span class="p">,</span>
+               <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+
+    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+
+    <span class="n">model_list</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;rnn&#39;</span><span class="p">,</span> <span class="s1">&#39;lstm&#39;</span><span class="p">,</span> <span class="s1">&#39;gru&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">model_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+      <span class="k">assert</span> <span class="n">model_type</span> <span class="ow">in</span> <span class="n">model_list</span>
+
+    <span class="k">if</span> <span class="n">model_type_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+      <span class="c1"># override model_type with id</span>
+      <span class="k">assert</span> <span class="n">model_type_id</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+      <span class="n">model_type</span> <span class="o">=</span> <span class="n">model_list</span><span class="p">[</span><span class="n">model_type_id</span><span class="p">]</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">model_type_id</span> <span class="o">=</span> <span class="n">model_type_id</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">=</span> <span class="n">task</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">model_type</span> <span class="o">=</span> <span class="n">model_type</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">h_dim</span> <span class="o">=</span> <span class="n">h_dim</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">n_layer</span> <span class="o">=</span> <span class="n">n_layer</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">learning_rate</span> <span class="o">=</span> <span class="n">learning_rate</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span> <span class="o">=</span> <span class="n">static_mode</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span> <span class="o">=</span> <span class="n">time_mode</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">model_path</span> <span class="o">=</span> <span class="n">model_path</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span> <span class="o">=</span> <span class="n">model_id</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+
+    <span class="c1"># Predictor model define</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">adam</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Set path for model saving</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">model_path</span><span class="p">):</span>
+      <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">model_path</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">save_file_name</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">/</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">model_path</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span> <span class="o">+</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s1">&#39;%H%M%S&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;.hdf5&#39;</span>
+
+<div class="viewcode-block" id="GeneralRNN.new"><a class="viewcode-back" href="../../api.html#prediction.GeneralRNN.new">[docs]</a>  <span class="k">def</span> <span class="nf">new</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create a new model with the same parameter as the existing one.</span>
+<span class="sd">      Args:</span>
+<span class="sd">        - model_id: an unique identifier for the new model</span>
+<span class="sd">      Returns:</span>
+<span class="sd">        - a new GeneralRNN</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">GeneralRNN</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">task</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">model_type</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">model_type_id</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">h_dim</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">n_layer</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">learning_rate</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span><span class="p">,</span>
+                      <span class="n">model_id</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">model_path</span><span class="p">)</span></div>
+
+  <span class="k">def</span> <span class="nf">_build_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Construct the model using feature and label statistics.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - x: temporal feature</span>
+<span class="sd">      - y: labels</span>
+<span class="sd">      </span>
+<span class="sd">    Returns:</span>
+<span class="sd">      - model: predictor model</span>
+<span class="sd">    &quot;&quot;&quot;</span>    
+    <span class="c1"># Parameters</span>
+    <span class="n">h_dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">h_dim</span>
+    <span class="n">n_layer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layer</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:])</span>
+    <span class="n">max_seq_len</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">Sequential</span><span class="p">()</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">layers</span><span class="o">.</span><span class="n">Masking</span><span class="p">(</span><span class="n">mask_value</span><span class="o">=-</span><span class="mf">1.</span><span class="p">,</span> <span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="n">max_seq_len</span><span class="p">,</span> <span class="n">dim</span><span class="p">)))</span>
+
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_layer</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+      <span class="n">model</span> <span class="o">=</span> <span class="n">rnn_sequential</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_type</span><span class="p">,</span> <span class="n">h_dim</span><span class="p">,</span> <span class="n">return_seq</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">dim_y</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dim_y</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span> <span class="n">return_seq_bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">elif</span> <span class="n">dim_y</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span> <span class="n">return_seq_bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">else</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Dimension of y </span><span class="si">{}</span><span class="s1"> is not 2 or 3.&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">dim_y</span><span class="p">)))</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">rnn_sequential</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_type</span><span class="p">,</span> <span class="n">h_dim</span><span class="p">,</span> <span class="n">return_seq_bool</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;intermediate_state&#39;</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">adam</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">optimizers</span><span class="o">.</span><span class="n">Adam</span><span class="p">(</span><span class="n">learning_rate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">learning_rate</span><span class="p">,</span> <span class="n">beta_1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">beta_2</span><span class="o">=</span><span class="mf">0.999</span><span class="p">,</span> <span class="n">amsgrad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s1">&#39;classification&#39;</span><span class="p">:</span>
+      <span class="k">if</span> <span class="n">dim_y</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">layers</span><span class="o">.</span><span class="n">TimeDistributed</span><span class="p">(</span><span class="n">layers</span><span class="o">.</span><span class="n">Dense</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;sigmoid&#39;</span><span class="p">)))</span>
+      <span class="k">elif</span> <span class="n">dim_y</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">layers</span><span class="o">.</span><span class="n">Dense</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;sigmoid&#39;</span><span class="p">))</span>        
+      <span class="n">model</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">loss</span><span class="o">=</span><span class="n">binary_cross_entropy_loss</span><span class="p">,</span> <span class="n">optimizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adam</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s1">&#39;regression&#39;</span><span class="p">:</span>
+      <span class="k">if</span> <span class="n">dim_y</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">layers</span><span class="o">.</span><span class="n">TimeDistributed</span><span class="p">(</span><span class="n">layers</span><span class="o">.</span><span class="n">Dense</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;linear&#39;</span><span class="p">)))</span>
+      <span class="k">elif</span> <span class="n">dim_y</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">layers</span><span class="o">.</span><span class="n">Dense</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;linear&#39;</span><span class="p">))</span>        
+      <span class="n">model</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">loss</span><span class="o">=</span><span class="n">mse_loss</span><span class="p">,</span> <span class="n">optimizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adam</span><span class="p">,</span> <span class="n">metrics</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;mse&#39;</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">model</span>
+  
+
+<div class="viewcode-block" id="GeneralRNN.fit"><a class="viewcode-back" href="../../api.html#prediction.GeneralRNN.fit">[docs]</a>  <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">train_split</span><span class="o">=</span><span class="s1">&#39;train&#39;</span><span class="p">,</span> <span class="n">valid_split</span><span class="o">=</span><span class="s1">&#39;val&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Fit the predictor model.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: temporal, static, label, time, treatment information</span>
+<span class="sd">      - fold: Cross validation fold</span>
+<span class="sd">      - train_split: training set splitting parameter</span>
+<span class="sd">      - valid_split: validation set splitting parameter</span>
+<span class="sd">      </span>
+<span class="sd">    Returns:</span>
+<span class="sd">      - self.predictor_model: trained predictor model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">train_x</span><span class="p">,</span> <span class="n">train_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">train_split</span><span class="p">)</span>
+    <span class="n">valid_x</span><span class="p">,</span> <span class="n">valid_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">valid_split</span><span class="p">)</span>
+    
+    <span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_model</span><span class="p">(</span><span class="n">train_x</span><span class="p">,</span> <span class="n">train_y</span><span class="p">)</span>
+
+    <span class="c1"># Callback for the best model saving</span>
+    <span class="n">save_best</span> <span class="o">=</span> <span class="n">ModelCheckpoint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_file_name</span><span class="p">,</span> <span class="n">monitor</span><span class="o">=</span><span class="s1">&#39;val_loss&#39;</span><span class="p">,</span>
+                                <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;min&#39;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">save_best_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Train the model</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">train_x</span><span class="p">,</span> <span class="n">train_y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">epochs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">epoch</span><span class="p">,</span> 
+                             <span class="n">validation_data</span><span class="o">=</span><span class="p">(</span><span class="n">valid_x</span><span class="p">,</span> <span class="n">valid_y</span><span class="p">),</span> <span class="n">callbacks</span><span class="o">=</span><span class="p">[</span><span class="n">save_best</span><span class="p">],</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span><span class="o">.</span><span class="n">load_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_file_name</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_file_name</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span></div>
+  
+<div class="viewcode-block" id="GeneralRNN.predict"><a class="viewcode-back" href="../../api.html#prediction.GeneralRNN.predict">[docs]</a>  <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">test_split</span><span class="o">=</span><span class="s1">&#39;test&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Return the temporal and feature importance.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: temporal, static, label, time, treatment information</span>
+<span class="sd">      - fold: Cross validation fold</span>
+<span class="sd">      - test_split: testing set splitting parameter</span>
+<span class="sd">      </span>
+<span class="sd">    Returns:</span>
+<span class="sd">      - test_y_hat: predictions on testing set</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">test_x</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">test_split</span><span class="p">)</span>
+    <span class="n">test_y_hat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_x</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">test_y_hat</span></div>
+  
+  
+  <span class="k">def</span> <span class="nf">get_states</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">split</span> <span class="o">=</span> <span class="s1">&#39;all&#39;</span><span class="p">):</span>
+    
+    <span class="n">train_x</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">split</span><span class="p">)</span>
+    
+    <span class="n">layer_name</span> <span class="o">=</span> <span class="s1">&#39;intermediate_state&#39;</span>
+    <span class="n">intermediate_model</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span><span class="o">.</span><span class="n">input</span><span class="p">,</span>
+                                        <span class="n">outputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span><span class="o">.</span><span class="n">get_layer</span><span class="p">(</span><span class="n">layer_name</span><span class="p">)</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
+    <span class="n">train_s</span> <span class="o">=</span> <span class="n">intermediate_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">train_x</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">train_s</span>
+
+<div class="viewcode-block" id="GeneralRNN.save_model"><a class="viewcode-back" href="../../api.html#prediction.GeneralRNN.save_model">[docs]</a>  <span class="k">def</span> <span class="nf">save_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Save the model to model_path</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - model_path: path of the saved model (it should be .h5)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">model_path</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span> <span class="o">==</span> <span class="s1">&#39;.h5&#39;</span>    
+    <span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">model_path</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="GeneralRNN.load_model"><a class="viewcode-back" href="../../api.html#prediction.GeneralRNN.load_model">[docs]</a>  <span class="k">def</span> <span class="nf">load_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load and return the model from model_path    </span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - model_path: path of the saved model (it should be .h5)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">model_path</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span> <span class="o">==</span> <span class="s1">&#39;.h5&#39;</span>
+    <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">model_path</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+    
+    <span class="n">loaded_model</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">load_model</span><span class="p">(</span><span class="n">model_path</span><span class="p">,</span> <span class="nb">compile</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s1">&#39;classification&#39;</span><span class="p">:</span>
+      <span class="n">loaded_model</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">loss</span><span class="o">=</span><span class="n">binary_cross_entropy_loss</span><span class="p">,</span> <span class="n">optimizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adam</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s1">&#39;regression&#39;</span><span class="p">:</span>        
+      <span class="n">loaded_model</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">loss</span><span class="o">=</span><span class="n">mse_loss</span><span class="p">,</span> <span class="n">optimizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adam</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">predictor_model</span> <span class="o">=</span> <span class="n">loaded_model</span>
+    <span class="k">return</span> <span class="n">loaded_model</span></div>
+
+  <span class="nd">@staticmethod</span>
+  <span class="k">def</span> <span class="nf">get_hyperparameter_space</span><span class="p">():</span>
+    <span class="n">hyp_</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;h_dim&#39;</span><span class="p">,</span> <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;discrete&#39;</span><span class="p">,</span> <span class="s1">&#39;domain&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="s1">&#39;dimensionality&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;n_layer&#39;</span><span class="p">,</span> <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;discrete&#39;</span><span class="p">,</span> <span class="s1">&#39;domain&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="s1">&#39;dimensionality&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;batch_size&#39;</span><span class="p">,</span> <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;discrete&#39;</span><span class="p">,</span> <span class="s1">&#39;domain&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">1001</span><span class="p">,</span> <span class="mi">100</span><span class="p">)),</span> <span class="s1">&#39;dimensionality&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;model_type_id&#39;</span><span class="p">,</span> <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;discrete&#39;</span><span class="p">,</span> <span class="s1">&#39;domain&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="s1">&#39;dimensionality&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;learning_rate&#39;</span><span class="p">,</span> <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;continuous&#39;</span><span class="p">,</span> <span class="s1">&#39;domain&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0005</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">],</span> <span class="s1">&#39;dimensionality&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}]</span>
+
+    <span class="k">return</span> <span class="n">hyp_</span></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, ML-AIM
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

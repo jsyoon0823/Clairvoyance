@@ -1,0 +1,421 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>utils.data_utils &mdash; Clairvoyance 0.1.dev0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> Clairvoyance
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1.dev0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">First steps</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/install.html">Installation guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/tutorial.html">Clairvoyance Tutorial</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Full API reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">Clairvoyance</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Clairvoyance</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>utils.data_utils</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for utils.data_utils</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Utility functions for data.</span>
+
+<span class="sd">(0) Define root and data directory</span>
+<span class="sd">(1) concate_xs: Concatenate temporal and static features</span>
+<span class="sd">(2) concate_xt: Concatenate temporal anf time features</span>
+<span class="sd">(3) list_diff: compute the difference between two lists in order</span>
+<span class="sd">(4) padding: put -1 values to the sequences outside of the time range</span>
+<span class="sd">(5) index_reset: return the pandas dataset with reset indice</span>
+<span class="sd">(6) pd_list_to_np_array: convert list of pandas to 3d array</span>
+<span class="sd">(7) normalization: MinMax Normalizer</span>
+<span class="sd">(8) renormalization: MinMax renormalizer</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Necessary packages</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+
+<span class="c1"># Define root and data directory</span>
+<span class="n">ROOT_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="vm">__file__</span><span class="p">))</span>
+<span class="n">DATA_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ROOT_DIR</span><span class="p">,</span> <span class="s1">&#39;../datasets/data/&#39;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="concate_xs"><a class="viewcode-back" href="../../api.html#utils.concate_xs">[docs]</a><span class="k">def</span> <span class="nf">concate_xs</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Concatenate static features to temporal feature for every time point.</span>
+<span class="sd">  </span>
+<span class="sd">  Args:</span>
+<span class="sd">    x: temporal features</span>
+<span class="sd">    s: static features</span>
+<span class="sd">    </span>
+<span class="sd">  Returns:</span>
+<span class="sd">    concate_x: concatenate temporal and static features</span>
+<span class="sd">  &quot;&quot;&quot;</span>    
+  <span class="n">concate_x</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+    
+  <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])):</span>
+    <span class="n">temp_x</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+    <span class="n">temp_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]),</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_x</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]),</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="c1"># -1 padding</span>
+    <span class="n">pad_idx</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">temp_x</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pad_idx</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+      <span class="n">temp_s</span><span class="p">[:</span><span class="n">pad_idx</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="c1"># Concatenate</span>
+    <span class="n">temp_xs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">temp_x</span><span class="p">,</span> <span class="n">temp_s</span><span class="p">),</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">concate_x</span> <span class="o">=</span> <span class="n">concate_x</span> <span class="o">+</span> <span class="p">[</span><span class="n">temp_xs</span><span class="p">]</span>
+      
+  <span class="n">concate_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">concate_x</span><span class="p">)</span>
+  
+  <span class="k">return</span> <span class="n">concate_x</span></div>
+
+
+<div class="viewcode-block" id="concate_xt"><a class="viewcode-back" href="../../api.html#utils.concate_xt">[docs]</a><span class="k">def</span> <span class="nf">concate_xt</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Concatenate time feature to temporal feature for every time point.</span>
+<span class="sd">  </span>
+<span class="sd">  Args:</span>
+<span class="sd">    x: temporal features</span>
+<span class="sd">    t: time feature</span>
+<span class="sd">    </span>
+<span class="sd">  Returns:</span>
+<span class="sd">    concate_x: concatenate temporal and time features</span>
+<span class="sd">  &quot;&quot;&quot;</span>    
+  <span class="n">concate_x</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+    
+  <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])):</span>
+    <span class="n">temp_x</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+    <span class="n">temp_t</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+    <span class="n">temp_xt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">temp_x</span><span class="p">,</span> <span class="n">temp_t</span><span class="p">),</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">concate_x</span> <span class="o">=</span> <span class="n">concate_x</span> <span class="o">+</span> <span class="p">[</span><span class="n">temp_xt</span><span class="p">]</span>
+      
+  <span class="n">concate_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">concate_x</span><span class="p">)</span>
+  
+  <span class="k">return</span> <span class="n">concate_x</span></div>
+
+
+<div class="viewcode-block" id="list_diff"><a class="viewcode-back" href="../../api.html#utils.list_diff">[docs]</a><span class="k">def</span> <span class="nf">list_diff</span><span class="p">(</span><span class="n">list1</span><span class="p">,</span> <span class="n">list2</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Compute list differences in order.</span>
+<span class="sd">  </span>
+<span class="sd">  Args:</span>
+<span class="sd">    - list1: first list</span>
+<span class="sd">    - list2: second list</span>
+<span class="sd">    </span>
+<span class="sd">  Returns:</span>
+<span class="sd">    - out: list difference</span>
+<span class="sd">  &quot;&quot;&quot;</span>
+  <span class="n">out</span> <span class="o">=</span> <span class="p">[]</span>
+  <span class="k">for</span> <span class="n">ele</span> <span class="ow">in</span> <span class="n">list1</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ele</span> <span class="ow">in</span> <span class="n">list2</span><span class="p">:</span>
+      <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ele</span><span class="p">)</span>
+      
+  <span class="k">return</span> <span class="n">out</span></div>
+
+
+<div class="viewcode-block" id="padding"><a class="viewcode-back" href="../../api.html#utils.padding">[docs]</a><span class="k">def</span> <span class="nf">padding</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">max_seq_len</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Sequence data padding.</span>
+<span class="sd">  </span>
+<span class="sd">  Args:</span>
+<span class="sd">    - x: temporal features</span>
+<span class="sd">    - max_seq_len: maximum sequence_length</span>
+<span class="sd">    </span>
+<span class="sd">  Returns:</span>
+<span class="sd">    - x_hat: padded temporal features</span>
+<span class="sd">  &quot;&quot;&quot;</span>
+  <span class="c1"># Shape of the temporal features</span>
+  <span class="n">seq_len</span><span class="p">,</span> <span class="n">dim</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span>  
+  <span class="n">col_name</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">values</span>
+  
+  <span class="c1"># Padding (-1)</span>
+  <span class="n">x_pad_hat</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">([</span><span class="n">max_seq_len</span> <span class="o">-</span> <span class="n">seq_len</span><span class="p">,</span> <span class="n">dim</span><span class="p">])</span>
+  <span class="n">x_pad_hat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">x_pad_hat</span><span class="p">,</span> <span class="n">columns</span> <span class="o">=</span> <span class="n">col_name</span><span class="p">)</span>
+  
+  <span class="n">x_hat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">((</span><span class="n">x</span><span class="p">,</span> <span class="n">x_pad_hat</span><span class="p">),</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
+  <span class="n">x_hat</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+  
+  <span class="n">x_hat</span> <span class="o">=</span> <span class="n">index_reset</span><span class="p">(</span><span class="n">x_hat</span><span class="p">)</span>
+  
+  <span class="k">return</span> <span class="n">x_hat</span></div>
+
+
+<div class="viewcode-block" id="index_reset"><a class="viewcode-back" href="../../api.html#utils.index_reset">[docs]</a><span class="k">def</span> <span class="nf">index_reset</span> <span class="p">(</span><span class="n">x</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Reset index in the pandas dataframe.</span>
+<span class="sd">  </span>
+<span class="sd">  Args:</span>
+<span class="sd">    x: original pandas dataframe</span>
+<span class="sd">    </span>
+<span class="sd">  Returns:</span>
+<span class="sd">    x: data with new indice</span>
+<span class="sd">  &quot;&quot;&quot;</span>  
+  <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+  <span class="k">if</span> <span class="s1">&#39;index&#39;</span> <span class="ow">in</span> <span class="n">x</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;index&#39;</span><span class="p">])</span>
+  
+  <span class="k">return</span> <span class="n">x</span></div>
+  
+
+<div class="viewcode-block" id="pd_list_to_np_array"><a class="viewcode-back" href="../../api.html#utils.pd_list_to_np_array">[docs]</a><span class="k">def</span> <span class="nf">pd_list_to_np_array</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">drop_columns</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Convert list of pandas dataframes to 3d numpy array.</span>
+<span class="sd">  </span>
+<span class="sd">  Args:</span>
+<span class="sd">    - x: list of pandas dataframe</span>
+<span class="sd">    - drop_column: column names to drop before converting to numpy array</span>
+<span class="sd">    </span>
+<span class="sd">  Returns:</span>
+<span class="sd">    - x_hat: 3d numpy array</span>
+<span class="sd">  &quot;&quot;&quot;</span>
+  <span class="n">x_hat</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+  <span class="k">for</span> <span class="n">component</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+    <span class="n">temp</span> <span class="o">=</span> <span class="n">component</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span> <span class="o">=</span> <span class="n">drop_columns</span><span class="p">)</span>
+    <span class="n">temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">temp</span><span class="p">)</span>
+    <span class="n">x_hat</span> <span class="o">=</span> <span class="n">x_hat</span> <span class="o">+</span> <span class="p">[</span><span class="n">temp</span><span class="p">]</span>
+    
+  <span class="n">x_hat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">x_hat</span><span class="p">)</span>
+  <span class="k">return</span> <span class="n">x_hat</span></div>
+
+
+<div class="viewcode-block" id="normalization"><a class="viewcode-back" href="../../api.html#utils.normalization">[docs]</a><span class="k">def</span> <span class="nf">normalization</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">subtract_val</span><span class="p">,</span> <span class="n">division_val</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Normalizer.</span>
+<span class="sd">    </span>
+<span class="sd">  Args:</span>
+<span class="sd">    - df: input data</span>
+<span class="sd">    - normalizer_type: &#39;minmax&#39; or &#39;standard&#39;</span>
+<span class="sd">    </span>
+<span class="sd">  Returns:</span>
+<span class="sd">    - df: normalized data</span>
+<span class="sd">    - norm_parameters: parameters for renomalization</span>
+<span class="sd">  &quot;&quot;&quot;</span>  
+
+  <span class="k">for</span> <span class="n">col_name</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+    <span class="n">df</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span> <span class="o">-</span> <span class="n">subtract_val</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span>
+    <span class="n">df</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">division_val</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+    
+  <span class="k">return</span> <span class="n">df</span></div>
+
+
+<span class="k">def</span> <span class="nf">get_normalization_param</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">normalizer_type</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Normalizer.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - df: input data</span>
+<span class="sd">      - normalizer_type: &#39;minmax&#39; or &#39;standard&#39;</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - df: normalized data</span>
+<span class="sd">      - norm_parameters: parameters for renomalization</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+  <span class="k">assert</span> <span class="n">normalizer_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;standard&#39;</span><span class="p">,</span> <span class="s1">&#39;minmax&#39;</span><span class="p">]</span>
+
+  <span class="k">if</span> <span class="n">normalizer_type</span> <span class="o">==</span> <span class="s1">&#39;standard&#39;</span><span class="p">:</span>
+    <span class="n">subtract_val</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+    <span class="n">division_val</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+  <span class="k">else</span><span class="p">:</span>
+    <span class="n">subtract_val</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+    <span class="n">division_val</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="n">df</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+
+  <span class="n">norm_parameters</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;subtract_val&#39;</span><span class="p">:</span> <span class="n">subtract_val</span><span class="p">,</span>
+                     <span class="s1">&#39;division_val&#39;</span><span class="p">:</span> <span class="n">division_val</span><span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">norm_parameters</span>
+
+
+<div class="viewcode-block" id="renormalization"><a class="viewcode-back" href="../../api.html#utils.renormalization">[docs]</a><span class="k">def</span> <span class="nf">renormalization</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">norm_parameters</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Renormalizer.</span>
+<span class="sd">    </span>
+<span class="sd">  Args:</span>
+<span class="sd">    - df: input data</span>
+<span class="sd">    - norm_parameters: parameters for renomalization</span>
+<span class="sd">    </span>
+<span class="sd">  Returns:</span>
+<span class="sd">    - df: renormalized data</span>
+<span class="sd">  &quot;&quot;&quot;</span>   
+  <span class="n">subtract_val</span> <span class="o">=</span> <span class="n">norm_parameters</span><span class="p">[</span><span class="s1">&#39;subtract_val&#39;</span><span class="p">]</span>
+  <span class="n">division_val</span> <span class="o">=</span> <span class="n">norm_parameters</span><span class="p">[</span><span class="s1">&#39;division_val&#39;</span><span class="p">]</span>
+  
+  <span class="n">feature_names</span> <span class="o">=</span> <span class="n">subtract_val</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+  
+  <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">feature_names</span><span class="p">:</span>
+    <span class="k">assert</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span>
+  
+  <span class="k">for</span> <span class="n">col_name</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">col_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">col_name</span><span class="p">]</span> <span class="o">-</span> <span class="n">subtract_val</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">col_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">col_name</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">division_val</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+    
+  <span class="k">return</span> <span class="n">df</span></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, ML-AIM
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

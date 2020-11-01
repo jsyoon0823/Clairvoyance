@@ -1,0 +1,888 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>treatments.CRN.CRN_Model &mdash; Clairvoyance 0.1.dev0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Clairvoyance
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1.dev0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">First steps</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../intro/install.html">Installation guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../intro/tutorial.html">Clairvoyance Tutorial</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Full API reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">Clairvoyance</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Clairvoyance</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>treatments.CRN.CRN_Model</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for treatments.CRN.CRN_Model</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Counterfactual Recurrent Network. Treatment effects model.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">from</span> <span class="nn">tensorflow.contrib.rnn</span> <span class="k">import</span> <span class="n">LSTMCell</span><span class="p">,</span> <span class="n">DropoutWrapper</span>
+<span class="kn">from</span> <span class="nn">tensorflow.python.ops</span> <span class="k">import</span> <span class="n">rnn</span>
+
+<span class="kn">from</span> <span class="nn">treatments.CRN.flip_gradient</span> <span class="k">import</span> <span class="n">flip_gradient</span>
+<span class="kn">from</span> <span class="nn">treatments.CRN.data_utils</span> <span class="k">import</span> <span class="n">data_preprocess</span><span class="p">,</span> <span class="n">data_preprocess_counterfactuals</span><span class="p">,</span> <span class="n">process_seq_data</span>
+
+<span class="kn">from</span> <span class="nn">base</span> <span class="k">import</span> <span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">PredictorMixin</span>
+
+
+<div class="viewcode-block" id="CRN_Model"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model">[docs]</a><span class="k">class</span> <span class="nc">CRN_Model</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">PredictorMixin</span><span class="p">):</span>
+  <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hyperparams</span><span class="p">,</span> <span class="n">b_train_decoder</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">task</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">static_mode</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">time_mode</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initialize the Counterfactual Recurrent Network (CRN).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - hyperparams: dictionary with the hyperparameters specifying the architecture of the CRN model.</span>
+<span class="sd">      - b_train_decoder: boolean value indicating whether to train decoder model.</span>
+<span class="sd">      - task: &#39;classification&#39; or &#39;regression&#39;</span>
+<span class="sd">      - static_mode: &#39;concatenate&#39; or None</span>
+<span class="sd">      - time_mode: &#39;concatenate&#39; or None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">br_size</span> <span class="o">=</span> <span class="n">hyperparams</span><span class="p">[</span><span class="s1">&#39;br_size&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">rnn_hidden_units</span> <span class="o">=</span> <span class="n">hyperparams</span><span class="p">[</span><span class="s1">&#39;rnn_hidden_units&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">fc_hidden_units</span> <span class="o">=</span> <span class="n">hyperparams</span><span class="p">[</span><span class="s1">&#39;fc_hidden_units&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">hyperparams</span><span class="p">[</span><span class="s1">&#39;batch_size&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">rnn_keep_prob</span> <span class="o">=</span> <span class="n">hyperparams</span><span class="p">[</span><span class="s1">&#39;rnn_keep_prob&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">learning_rate</span> <span class="o">=</span> <span class="n">hyperparams</span><span class="p">[</span><span class="s1">&#39;learning_rate&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">num_epochs</span> <span class="o">=</span> <span class="n">hyperparams</span><span class="p">[</span><span class="s1">&#39;num_epochs&#39;</span><span class="p">]</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">=</span> <span class="n">task</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span> <span class="o">=</span> <span class="n">static_mode</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span> <span class="o">=</span> <span class="n">time_mode</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">b_train_decoder</span> <span class="o">=</span> <span class="n">b_train_decoder</span>
+
+<div class="viewcode-block" id="CRN_Model.init_model"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.init_model">[docs]</a>  <span class="k">def</span> <span class="nf">init_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Args:</span>
+<span class="sd">      - params: initialize the placeholder variables in the TensorFlow graph.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tf</span><span class="o">.</span><span class="n">reset_default_graph</span><span class="p">()</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;num_treatments&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">num_covariates</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;num_covariates&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;num_outputs&#39;</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;max_sequence_length&#39;</span><span class="p">]</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">current_covariates</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_covariates</span><span class="p">])</span>
+
+    <span class="c1"># Initial previous treatment needs to consist of zeros (this is done when building the feed dictionary)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">previous_treatments</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">])</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">current_treatments</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">])</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span><span class="p">])</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">active_entries</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">init_state</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b_train_decoder</span><span class="p">):</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">init_state</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_hidden_units</span><span class="p">])</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[])</span>  <span class="c1"># Gradient reversal scalar</span></div>
+
+<div class="viewcode-block" id="CRN_Model.build_balancing_representation"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.build_balancing_representation">[docs]</a>  <span class="k">def</span> <span class="nf">build_balancing_representation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Process input using RNN with LSTM cell to build the balancing representation.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - balancing_representation: balancing representation for each timestep in the sequence.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">rnn_input</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">current_covariates</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">previous_treatments</span><span class="p">],</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">sequence_length</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">reduce_max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_entries</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+    <span class="n">rnn_cell</span> <span class="o">=</span> <span class="n">DropoutWrapper</span><span class="p">(</span><span class="n">LSTMCell</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnn_hidden_units</span><span class="p">,</span> <span class="n">state_is_tuple</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                              <span class="n">output_keep_prob</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rnn_keep_prob</span><span class="p">,</span>
+                              <span class="n">state_keep_prob</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rnn_keep_prob</span><span class="p">,</span>
+                              <span class="n">variational_recurrent</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                              <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="n">decoder_init_state</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b_train_decoder</span><span class="p">):</span>
+      <span class="n">decoder_init_state</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">init_state</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_state</span><span class="p">],</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">rnn_output</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">rnn</span><span class="o">.</span><span class="n">dynamic_rnn</span><span class="p">(</span>
+      <span class="n">rnn_cell</span><span class="p">,</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">rnn_input</span><span class="p">,</span>
+      <span class="n">initial_state</span><span class="o">=</span><span class="n">decoder_init_state</span><span class="p">,</span>
+      <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+      <span class="n">sequence_length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sequence_length</span><span class="p">)</span>
+
+    <span class="c1"># Flatten to apply same weights to all time steps.</span>
+    <span class="n">rnn_output</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">rnn_output</span><span class="p">,</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_hidden_units</span><span class="p">])</span>
+    <span class="n">balancing_representation</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">rnn_output</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">br_size</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">elu</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">balancing_representation</span></div>
+
+<div class="viewcode-block" id="CRN_Model.build_treatment_assignments_one_hot"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.build_treatment_assignments_one_hot">[docs]</a>  <span class="k">def</span> <span class="nf">build_treatment_assignments_one_hot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">balancing_representation</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Treatment classifier. Predicts treatment from the built representation.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">     - balancing_representation: balancing representation for each timestep in the sequence.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - treatment_prob_predictions: softmax output with probabilities for each treatment given the representation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">balancing_representation_gr</span> <span class="o">=</span> <span class="n">flip_gradient</span><span class="p">(</span><span class="n">balancing_representation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span>
+
+    <span class="n">treatments_network_layer</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">balancing_representation_gr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_hidden_units</span><span class="p">,</span>
+                                               <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">elu</span><span class="p">)</span>
+    <span class="n">treatment_logit_predictions</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">treatments_network_layer</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">treatment_prob_predictions</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">treatment_logit_predictions</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">treatment_prob_predictions</span></div>
+
+<div class="viewcode-block" id="CRN_Model.build_outcomes"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.build_outcomes">[docs]</a>  <span class="k">def</span> <span class="nf">build_outcomes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">balancing_representation</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Outcome predictor. Estimates potential outcomes given balancing representation.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">     - balancing_representation: balancing representation for each timestep in the sequence.</span>
+
+<span class="sd">    Return:</span>
+<span class="sd">      - outcome_predictions: predicted factual outcome.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">current_treatments_reshape</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_treatments</span><span class="p">,</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">])</span>
+
+    <span class="n">outcome_network_input</span> <span class="o">=</span> <span class="n">balancing_representation</span>
+
+    <span class="n">all_outcomes</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">treatment</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">):</span>
+      <span class="n">outcome_network_layer_1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">outcome_network_input</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_hidden_units</span><span class="p">,</span>
+                                                <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">elu</span><span class="p">,</span>
+                                                <span class="n">name</span><span class="o">=</span><span class="s1">&#39;outcome_layer_1_</span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">treatment</span><span class="p">),</span> <span class="n">reuse</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">AUTO_REUSE</span><span class="p">)</span>
+
+      <span class="n">outcome_predictions_treatment</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">outcome_network_layer_1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+      <span class="n">all_outcomes</span><span class="p">[</span><span class="n">treatment</span><span class="p">]</span> <span class="o">=</span> <span class="n">outcome_predictions_treatment</span>
+
+    <span class="n">outcome_predictions</span> <span class="o">=</span> <span class="p">(</span><span class="n">all_outcomes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">current_treatments_reshape</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span> <span class="o">+</span> <span class="p">(</span>
+        <span class="n">all_outcomes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">current_treatments_reshape</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span>
+
+    <span class="k">return</span> <span class="n">outcome_predictions</span></div>
+
+<div class="viewcode-block" id="CRN_Model.fit_encoder"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.fit_encoder">[docs]</a>  <span class="k">def</span> <span class="nf">fit_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">train_split</span><span class="o">=</span><span class="s1">&#39;train&#39;</span><span class="p">,</span> <span class="n">val_split</span><span class="o">=</span><span class="s1">&#39;val&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Fit the treatment effects encoder model model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: temporal, static, label, time, treatment information</span>
+<span class="sd">      - fold: Cross validation fold</span>
+<span class="sd">      - train_split: training set splitting parameter</span>
+<span class="sd">      - valid_split: validation set splitting parameter</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dataset_crn_train</span> <span class="o">=</span> <span class="n">data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">train_split</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span><span class="p">)</span>
+    <span class="n">dataset_crn_val</span> <span class="o">=</span> <span class="n">data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">val_split</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span><span class="p">)</span>
+
+    <span class="n">num_outputs</span> <span class="o">=</span> <span class="n">dataset_crn_train</span><span class="p">[</span><span class="s1">&#39;outputs&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">max_sequence_length</span> <span class="o">=</span> <span class="n">dataset_crn_train</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">num_covariates</span> <span class="o">=</span> <span class="n">dataset_crn_train</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;num_treatments&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+              <span class="s1">&#39;num_covariates&#39;</span><span class="p">:</span> <span class="n">num_covariates</span><span class="p">,</span>
+              <span class="s1">&#39;num_outputs&#39;</span><span class="p">:</span> <span class="n">num_outputs</span><span class="p">,</span>
+              <span class="s1">&#39;max_sequence_length&#39;</span><span class="p">:</span> <span class="n">max_sequence_length</span><span class="p">}</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">init_model</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
+
+    <span class="c1"># Train the model</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">dataset_crn_train</span><span class="p">,</span> <span class="n">dataset_crn_val</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CRN_Model.fit_decoder"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.fit_decoder">[docs]</a>  <span class="k">def</span> <span class="nf">fit_decoder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">encoder_model</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">train_split</span><span class="o">=</span><span class="s1">&#39;train&#39;</span><span class="p">,</span> <span class="n">val_split</span><span class="o">=</span><span class="s1">&#39;val&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Fit the treatment effects encoder model model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - encoder_model: trained encoder model needed for initializing the decoder</span>
+<span class="sd">      - projection_horizon: number of future timesteps for training decoder</span>
+<span class="sd">      - dataset: temporal, static, label, time, treatment information</span>
+<span class="sd">      - fold: Cross validation fold</span>
+<span class="sd">      - train_split: training set splitting parameter</span>
+<span class="sd">      - valid_split: validation set splitting parameter</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dataset_crn_train</span> <span class="o">=</span> <span class="n">data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">train_split</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span><span class="p">)</span>
+    <span class="n">dataset_crn_val</span> <span class="o">=</span> <span class="n">data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">val_split</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span><span class="p">)</span>
+
+    <span class="n">training_br_states</span> <span class="o">=</span> <span class="n">encoder_model</span><span class="o">.</span><span class="n">get_balancing_reps</span><span class="p">(</span><span class="n">dataset_crn_train</span><span class="p">)</span>
+    <span class="n">validation_br_states</span> <span class="o">=</span> <span class="n">encoder_model</span><span class="o">.</span><span class="n">get_balancing_reps</span><span class="p">(</span><span class="n">dataset_crn_val</span><span class="p">)</span>
+
+    <span class="n">training_seq_processed</span> <span class="o">=</span> <span class="n">process_seq_data</span><span class="p">(</span><span class="n">dataset_crn_train</span><span class="p">,</span> <span class="n">training_br_states</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">)</span>
+    <span class="n">validation_seq_processed</span> <span class="o">=</span> <span class="n">process_seq_data</span><span class="p">(</span><span class="n">dataset_crn_val</span><span class="p">,</span> <span class="n">validation_br_states</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">)</span>
+
+    <span class="n">num_outputs</span> <span class="o">=</span> <span class="n">training_seq_processed</span><span class="p">[</span><span class="s1">&#39;outputs&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">num_covariates</span> <span class="o">=</span> <span class="n">training_seq_processed</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;num_treatments&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+              <span class="s1">&#39;num_covariates&#39;</span><span class="p">:</span> <span class="n">num_covariates</span><span class="p">,</span>
+              <span class="s1">&#39;num_outputs&#39;</span><span class="p">:</span> <span class="n">num_outputs</span><span class="p">,</span>
+              <span class="s1">&#39;max_sequence_length&#39;</span><span class="p">:</span> <span class="n">projection_horizon</span><span class="p">}</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">init_model</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
+
+    <span class="c1"># Train the model</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">training_seq_processed</span><span class="p">,</span> <span class="n">validation_seq_processed</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CRN_Model.predict"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.predict">[docs]</a>  <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">test_split</span><span class="o">=</span><span class="s1">&#39;test&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Return the predicted outcomes on the test set.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: temporal, static, label, time, treatment information</span>
+<span class="sd">      - fold: Test fold</span>
+<span class="sd">      - test_split: testing set splitting parameter</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - test_y_hat: predictions on testing set</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dataset_crn_test</span> <span class="o">=</span> <span class="n">data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span><span class="p">,</span> <span class="n">test_split</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span><span class="p">)</span>
+    <span class="n">test_y_hat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_predictions</span><span class="p">(</span><span class="n">dataset_crn_test</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">test_y_hat</span></div>
+
+<div class="viewcode-block" id="CRN_Model.predict_counterfactual_trajectories"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.predict_counterfactual_trajectories">[docs]</a>  <span class="k">def</span> <span class="nf">predict_counterfactual_trajectories</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">encoder_model</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">patient_id</span><span class="p">,</span> <span class="n">timestep</span><span class="p">,</span> <span class="n">treatment_options</span><span class="p">,</span> <span class="n">fold</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                                          <span class="n">test_split</span><span class="o">=</span><span class="s1">&#39;test&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Return the counterfactual trajectories for a patient and for the specified future treatment options.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - encoder_model: trained encoder model needed for initializing the decoder</span>
+<span class="sd">      - dataset: dataset with test patients</span>
+<span class="sd">      - patient_id: patient id of patient for which the counterfactuals are computed</span>
+<span class="sd">      - timestep: timestept in the patient trajectory where counterfactuals are predicted</span>
+<span class="sd">      - treatment_options: treatment options for computing the counterfactual trajectories</span>
+<span class="sd">      - fold: test fold</span>
+<span class="sd">      - test_split: testing set splitting parameter</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - history: history of previous outpus for the patient.</span>
+<span class="sd">      - counterfactual_trajectories: trajectories of counterfactual predictions for the specified future treatments</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">history</span><span class="p">,</span> <span class="n">encoder_output</span><span class="p">,</span> <span class="n">dataset_crn_decoder</span> <span class="o">=</span> <span class="n">data_preprocess_counterfactuals</span><span class="p">(</span><span class="n">encoder_model</span><span class="o">=</span><span class="n">encoder_model</span><span class="p">,</span>
+                                                                                    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+                                                                                    <span class="n">patient_id</span><span class="o">=</span><span class="n">patient_id</span><span class="p">,</span>
+                                                                                    <span class="n">timestep</span><span class="o">=</span><span class="n">timestep</span><span class="p">,</span>
+                                                                                    <span class="n">treatment_options</span><span class="o">=</span><span class="n">treatment_options</span><span class="p">,</span>
+                                                                                    <span class="n">fold</span><span class="o">=</span><span class="n">fold</span><span class="p">,</span>
+                                                                                    <span class="n">split</span><span class="o">=</span><span class="n">test_split</span><span class="p">,</span>
+                                                                                    <span class="n">static_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">static_mode</span><span class="p">,</span>
+                                                                                    <span class="n">time_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time_mode</span><span class="p">)</span>
+    <span class="n">decoder_outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_autoregressive_sequence_predictions</span><span class="p">(</span><span class="n">dataset_crn_decoder</span><span class="p">)</span>
+    <span class="n">counterfactual_trajectories</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">encoder_output</span><span class="p">,</span> <span class="n">decoder_outputs</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">history</span><span class="p">,</span> <span class="n">counterfactual_trajectories</span></div>
+
+<div class="viewcode-block" id="CRN_Model.train"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.train">[docs]</a>  <span class="k">def</span> <span class="nf">train</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset_train</span><span class="p">,</span> <span class="n">dataset_val</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Train the CRN model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset_train: training dataset.</span>
+<span class="sd">      - param dataset_val: validation dataset.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">balancing_representation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_balancing_representation</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">treatment_prob_predictions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_treatment_assignments_one_hot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">balancing_representation</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">predictions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_outcomes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">balancing_representation</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">loss_treatments</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_loss_treatments_one_hot</span><span class="p">(</span><span class="n">target_treatments</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">current_treatments</span><span class="p">,</span>
+                                                                <span class="n">treatment_predictions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">treatment_prob_predictions</span><span class="p">,</span>
+                                                                <span class="n">active_entries</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">active_entries</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">loss_outcomes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_loss_predictions</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_entries</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_outcomes</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_treatments</span>
+    <span class="n">optimizer</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">AdamOptimizer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">learning_rate</span><span class="p">)</span><span class="o">.</span><span class="n">minimize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">)</span>
+
+    <span class="n">tf_device</span> <span class="o">=</span> <span class="s1">&#39;gpu&#39;</span>
+    <span class="k">if</span> <span class="n">tf_device</span> <span class="o">==</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+      <span class="n">tf_config</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">ConfigProto</span><span class="p">(</span><span class="n">log_device_placement</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">device_count</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;GPU&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">tf_config</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">ConfigProto</span><span class="p">(</span><span class="n">log_device_placement</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">device_count</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;GPU&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
+      <span class="n">tf_config</span><span class="o">.</span><span class="n">gpu_options</span><span class="o">.</span><span class="n">allow_growth</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">sess</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">tf_config</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">global_variables_initializer</span><span class="p">())</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">local_variables_initializer</span><span class="p">())</span>
+
+    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_epochs</span><span class="p">):</span>
+      <span class="n">p</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">epoch</span><span class="p">)</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_epochs</span><span class="p">)</span>
+      <span class="n">alpha_current</span> <span class="o">=</span> <span class="mf">2.</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">10.</span> <span class="o">*</span> <span class="n">p</span><span class="p">))</span> <span class="o">-</span> <span class="mi">1</span>
+
+      <span class="n">iteration</span> <span class="o">=</span> <span class="mi">0</span>
+      <span class="k">for</span> <span class="p">(</span><span class="n">batch_current_covariates</span><span class="p">,</span> <span class="n">batch_previous_treatments</span><span class="p">,</span> <span class="n">batch_current_treatments</span><span class="p">,</span> <span class="n">batch_init_state</span><span class="p">,</span>
+           <span class="n">batch_outputs</span><span class="p">,</span> <span class="n">batch_active_entries</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gen_epoch</span><span class="p">(</span><span class="n">dataset_train</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+        <span class="n">feed_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_feed_dictionary</span><span class="p">(</span><span class="n">batch_current_covariates</span><span class="o">=</span><span class="n">batch_current_covariates</span><span class="p">,</span>
+                                               <span class="n">batch_previous_treatments</span><span class="o">=</span><span class="n">batch_previous_treatments</span><span class="p">,</span>
+                                               <span class="n">batch_current_treatments</span><span class="o">=</span><span class="n">batch_current_treatments</span><span class="p">,</span>
+                                               <span class="n">batch_init_state</span><span class="o">=</span><span class="n">batch_init_state</span><span class="p">,</span>
+                                               <span class="n">batch_active_entries</span><span class="o">=</span><span class="n">batch_active_entries</span><span class="p">,</span>
+                                               <span class="n">batch_outputs</span><span class="o">=</span><span class="n">batch_outputs</span><span class="p">,</span> <span class="n">alpha_current</span><span class="o">=</span><span class="n">alpha_current</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">training_loss</span><span class="p">,</span> <span class="n">training_loss_outcomes</span><span class="p">,</span> <span class="n">training_loss_treatments</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+          <span class="p">[</span><span class="n">optimizer</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_outcomes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_treatments</span><span class="p">],</span>
+          <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_dict</span><span class="p">)</span>
+        <span class="n">iteration</span> <span class="o">+=</span> <span class="mi">1</span>
+
+      <span class="c1"># Training loss</span>
+      <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;Epoch </span><span class="si">{}</span><span class="s2"> | total loss = </span><span class="si">{}</span><span class="s2"> | outcome loss = </span><span class="si">{}</span><span class="s2"> | &quot;</span>
+        <span class="s2">&quot;treatment loss = </span><span class="si">{}</span><span class="s2"> | current alpha = </span><span class="si">{}</span><span class="s2"> &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">training_loss</span><span class="p">,</span> <span class="n">training_loss_outcomes</span><span class="p">,</span>
+                                                           <span class="n">training_loss_treatments</span><span class="p">,</span> <span class="n">alpha_current</span><span class="p">))</span>
+
+      <span class="c1"># Validation loss</span>
+      <span class="n">validation_loss</span><span class="p">,</span> <span class="n">validation_loss_outcomes</span><span class="p">,</span> <span class="n">validation_loss_treatments</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_validation_loss</span><span class="p">(</span>
+        <span class="n">dataset_val</span><span class="p">)</span>
+      <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;Epoch </span><span class="si">{}</span><span class="s2"> Summary| Validation loss = </span><span class="si">{}</span><span class="s2"> | Validation loss outcomes = </span><span class="si">{}</span><span class="s2"> | Validation loss treatments = </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+          <span class="n">epoch</span><span class="p">,</span> <span class="n">validation_loss</span><span class="p">,</span> <span class="n">validation_loss_outcomes</span><span class="p">,</span> <span class="n">validation_loss_treatments</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="CRN_Model.load_crn_model"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.load_crn_model">[docs]</a>  <span class="k">def</span> <span class="nf">load_crn_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_name</span><span class="p">,</span> <span class="n">model_folder</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load trained CRN model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - model_name: name of saved model.</span>
+<span class="sd">      - model_folder: directory with saved model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">balancing_representation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_balancing_representation</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">treatment_prob_predictions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_treatment_assignments_one_hot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">balancing_representation</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">predictions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_outcomes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">balancing_representation</span><span class="p">)</span>
+
+    <span class="n">tf_device</span> <span class="o">=</span> <span class="s1">&#39;gpu&#39;</span>
+    <span class="k">if</span> <span class="n">tf_device</span> <span class="o">==</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+      <span class="n">tf_config</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">ConfigProto</span><span class="p">(</span><span class="n">log_device_placement</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">device_count</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;GPU&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">tf_config</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">ConfigProto</span><span class="p">(</span><span class="n">log_device_placement</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">device_count</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;GPU&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
+      <span class="n">tf_config</span><span class="o">.</span><span class="n">gpu_options</span><span class="o">.</span><span class="n">allow_growth</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">sess</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">tf_config</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">global_variables_initializer</span><span class="p">())</span>
+    <span class="n">checkpoint_name</span> <span class="o">=</span> <span class="n">model_name</span> <span class="o">+</span> <span class="s2">&quot;_final&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">load_network</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="p">,</span> <span class="n">model_folder</span><span class="p">,</span> <span class="n">checkpoint_name</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CRN_Model.build_feed_dictionary"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.build_feed_dictionary">[docs]</a>  <span class="k">def</span> <span class="nf">build_feed_dictionary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_current_covariates</span><span class="p">,</span> <span class="n">batch_previous_treatments</span><span class="p">,</span>
+                            <span class="n">batch_current_treatments</span><span class="p">,</span> <span class="n">batch_init_state</span><span class="p">,</span> <span class="n">batch_active_entries</span><span class="p">,</span>
+                            <span class="n">batch_outputs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                            <span class="n">alpha_current</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">training_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Build feed dictionary for TensorFlow graph.&quot;&quot;&quot;</span>
+
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_previous_treatments</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">zero_init_treatment</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">[</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">])</span>
+    <span class="n">new_batch_previous_treatments</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">zero_init_treatment</span><span class="p">,</span> <span class="n">batch_previous_treatments</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">training_mode</span><span class="p">:</span>
+      <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">b_train_decoder</span><span class="p">:</span>
+        <span class="n">feed_dict</span> <span class="o">=</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">current_covariates</span><span class="p">:</span> <span class="n">batch_current_covariates</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">previous_treatments</span><span class="p">:</span> <span class="n">batch_previous_treatments</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">current_treatments</span><span class="p">:</span> <span class="n">batch_current_treatments</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">init_state</span><span class="p">:</span> <span class="n">batch_init_state</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span> <span class="n">batch_outputs</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">active_entries</span><span class="p">:</span> <span class="n">batch_active_entries</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">:</span> <span class="n">alpha_current</span><span class="p">}</span>
+
+      <span class="k">else</span><span class="p">:</span>
+        <span class="n">feed_dict</span> <span class="o">=</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">current_covariates</span><span class="p">:</span> <span class="n">batch_current_covariates</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">previous_treatments</span><span class="p">:</span> <span class="n">new_batch_previous_treatments</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">current_treatments</span><span class="p">:</span> <span class="n">batch_current_treatments</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span> <span class="n">batch_outputs</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">active_entries</span><span class="p">:</span> <span class="n">batch_active_entries</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">:</span> <span class="n">alpha_current</span><span class="p">}</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">b_train_decoder</span><span class="p">:</span>
+        <span class="n">feed_dict</span> <span class="o">=</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">current_covariates</span><span class="p">:</span> <span class="n">batch_current_covariates</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">previous_treatments</span><span class="p">:</span> <span class="n">batch_previous_treatments</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">current_treatments</span><span class="p">:</span> <span class="n">batch_current_treatments</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">init_state</span><span class="p">:</span> <span class="n">batch_init_state</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">active_entries</span><span class="p">:</span> <span class="n">batch_active_entries</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">:</span> <span class="n">alpha_current</span><span class="p">}</span>
+      <span class="k">else</span><span class="p">:</span>
+        <span class="n">feed_dict</span> <span class="o">=</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">current_covariates</span><span class="p">:</span> <span class="n">batch_current_covariates</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">previous_treatments</span><span class="p">:</span> <span class="n">new_batch_previous_treatments</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">current_treatments</span><span class="p">:</span> <span class="n">batch_current_treatments</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">active_entries</span><span class="p">:</span> <span class="n">batch_active_entries</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">:</span> <span class="n">alpha_current</span><span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">feed_dict</span></div>
+
+<div class="viewcode-block" id="CRN_Model.gen_epoch"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.gen_epoch">[docs]</a>  <span class="k">def</span> <span class="nf">gen_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">training_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Generates epoch from training, by splitting the dataset into chunks of batch size.&quot;&quot;&quot;</span>
+
+    <span class="n">dataset_size</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">num_batches</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">dataset_size</span> <span class="o">/</span> <span class="n">batch_size</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_batches</span><span class="p">):</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="n">num_batches</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">batch_samples</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset_size</span> <span class="o">-</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">dataset_size</span><span class="p">)</span>
+      <span class="k">else</span><span class="p">:</span>
+        <span class="n">batch_samples</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="n">batch_size</span><span class="p">,</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">batch_size</span><span class="p">)</span>
+
+      <span class="k">if</span> <span class="n">training_mode</span><span class="p">:</span>
+        <span class="n">batch_current_covariates</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">batch_previous_treatments</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;previous_treatments&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">batch_current_treatments</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_treatments&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">batch_outputs</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;outputs&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">batch_active_entries</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;active_entries&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+
+        <span class="n">batch_init_state</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">b_train_decoder</span><span class="p">:</span>
+          <span class="n">batch_init_state</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;init_state&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:]</span>
+
+        <span class="k">yield</span> <span class="p">(</span><span class="n">batch_current_covariates</span><span class="p">,</span> <span class="n">batch_previous_treatments</span><span class="p">,</span> <span class="n">batch_current_treatments</span><span class="p">,</span> <span class="n">batch_init_state</span><span class="p">,</span>
+               <span class="n">batch_outputs</span><span class="p">,</span> <span class="n">batch_active_entries</span><span class="p">)</span>
+      <span class="k">else</span><span class="p">:</span>
+        <span class="n">batch_current_covariates</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">batch_previous_treatments</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;previous_treatments&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">batch_current_treatments</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_treatments&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">batch_active_entries</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;active_entries&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+
+        <span class="n">batch_init_state</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">b_train_decoder</span><span class="p">:</span>
+          <span class="n">batch_init_state</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;init_state&#39;</span><span class="p">][</span><span class="n">batch_samples</span><span class="p">,</span> <span class="p">:]</span>
+
+        <span class="k">yield</span> <span class="p">(</span><span class="n">batch_current_covariates</span><span class="p">,</span> <span class="n">batch_previous_treatments</span><span class="p">,</span> <span class="n">batch_current_treatments</span><span class="p">,</span> <span class="n">batch_init_state</span><span class="p">,</span>
+               <span class="n">batch_active_entries</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CRN_Model.get_balancing_reps"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.get_balancing_reps">[docs]</a>  <span class="k">def</span> <span class="nf">get_balancing_reps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute balancing representations for patients in the dataset.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: dataset with test patients</span>
+<span class="sd">    Returns:</span>
+<span class="sd">      - balancing representations at each timestep for patients in the dataset.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Computing balancing representations.&quot;</span><span class="p">)</span>
+
+    <span class="n">dataset_size</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">balancing_reps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+      <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">dataset_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">br_size</span><span class="p">))</span>
+
+    <span class="n">dataset_size</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dataset_size</span> <span class="o">&gt;</span> <span class="mi">10000</span><span class="p">):</span>  <span class="c1"># Does not fit into memory</span>
+      <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">10000</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">batch_size</span> <span class="o">=</span> <span class="n">dataset_size</span>
+
+    <span class="n">num_batches</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">dataset_size</span> <span class="o">/</span> <span class="n">batch_size</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="n">batch_id</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">batch_current_covariates</span><span class="p">,</span> <span class="n">batch_previous_treatments</span><span class="p">,</span>
+         <span class="n">batch_current_treatments</span><span class="p">,</span> <span class="n">batch_init_state</span><span class="p">,</span> <span class="n">batch_active_entries</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gen_epoch</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span>
+                                                                                             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+                                                                                             <span class="n">training_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+      <span class="n">feed_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_feed_dictionary</span><span class="p">(</span><span class="n">batch_current_covariates</span><span class="o">=</span><span class="n">batch_current_covariates</span><span class="p">,</span>
+                                             <span class="n">batch_previous_treatments</span><span class="o">=</span><span class="n">batch_previous_treatments</span><span class="p">,</span>
+                                             <span class="n">batch_current_treatments</span><span class="o">=</span><span class="n">batch_current_treatments</span><span class="p">,</span>
+                                             <span class="n">batch_active_entries</span><span class="o">=</span><span class="n">batch_active_entries</span><span class="p">,</span>
+                                             <span class="n">batch_init_state</span><span class="o">=</span><span class="n">batch_init_state</span><span class="p">,</span> <span class="n">training_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+      <span class="c1"># Dropout samples</span>
+      <span class="n">total_predictions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">br_size</span><span class="p">))</span>
+
+      <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">):</span>
+        <span class="n">br_outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">balancing_representation</span><span class="p">,</span> <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_dict</span><span class="p">)</span>
+        <span class="n">br_outputs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">br_outputs</span><span class="p">,</span>
+                                <span class="n">newshape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">br_size</span><span class="p">))</span>
+        <span class="n">total_predictions</span> <span class="o">+=</span> <span class="n">br_outputs</span>
+
+      <span class="n">total_predictions</span> <span class="o">/=</span> <span class="n">num_samples</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="n">batch_id</span> <span class="o">==</span> <span class="n">num_batches</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">batch_samples</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset_size</span> <span class="o">-</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">dataset_size</span><span class="p">)</span>
+      <span class="k">else</span><span class="p">:</span>
+        <span class="n">batch_samples</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_id</span> <span class="o">*</span> <span class="n">batch_size</span><span class="p">,</span> <span class="p">(</span><span class="n">batch_id</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">batch_size</span><span class="p">)</span>
+
+      <span class="n">batch_id</span> <span class="o">+=</span> <span class="mi">1</span>
+      <span class="n">balancing_reps</span><span class="p">[</span><span class="n">batch_samples</span><span class="p">]</span> <span class="o">=</span> <span class="n">total_predictions</span>
+
+    <span class="k">return</span> <span class="n">balancing_reps</span></div>
+
+<div class="viewcode-block" id="CRN_Model.get_predictions"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.get_predictions">[docs]</a>  <span class="k">def</span> <span class="nf">get_predictions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">b_with_uncertainty</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Estimate one-step-ahead patient outcomes.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: dataset with test patients.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - predictions: predicted one-step-ahead outcomes for patients in the dataset.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dataset_size</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">predictions_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+      <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">dataset_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span><span class="p">))</span>
+    <span class="n">predictions_std</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+      <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">dataset_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span><span class="p">))</span>
+
+    <span class="n">dataset_size</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dataset_size</span> <span class="o">&gt;</span> <span class="mi">10000</span><span class="p">):</span>
+      <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">10000</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">batch_size</span> <span class="o">=</span> <span class="n">dataset_size</span>
+
+    <span class="n">num_batches</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">dataset_size</span> <span class="o">/</span> <span class="n">batch_size</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="n">batch_id</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">batch_current_covariates</span><span class="p">,</span> <span class="n">batch_previous_treatments</span><span class="p">,</span>
+         <span class="n">batch_current_treatments</span><span class="p">,</span> <span class="n">batch_init_state</span><span class="p">,</span> <span class="n">batch_active_entries</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gen_epoch</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span>
+                                                                                             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+                                                                                             <span class="n">training_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+      <span class="n">feed_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_feed_dictionary</span><span class="p">(</span><span class="n">batch_current_covariates</span><span class="o">=</span><span class="n">batch_current_covariates</span><span class="p">,</span>
+                                             <span class="n">batch_previous_treatments</span><span class="o">=</span><span class="n">batch_previous_treatments</span><span class="p">,</span>
+                                             <span class="n">batch_current_treatments</span><span class="o">=</span><span class="n">batch_current_treatments</span><span class="p">,</span>
+                                             <span class="n">batch_init_state</span><span class="o">=</span><span class="n">batch_init_state</span><span class="p">,</span>
+                                             <span class="n">batch_active_entries</span><span class="o">=</span><span class="n">batch_active_entries</span><span class="p">,</span> <span class="n">training_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+      <span class="c1"># Dropout samples</span>
+      <span class="n">total_predictions</span> <span class="o">=</span> <span class="p">[]</span>
+
+      <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">):</span>
+        <span class="n">predicted_outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">predictions</span><span class="p">,</span> <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_dict</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s1">&#39;classification&#39;</span><span class="p">:</span>
+          <span class="n">predicted_outputs</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">predicted_outputs</span><span class="p">))</span>
+
+        <span class="n">predicted_outputs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">predicted_outputs</span><span class="p">,</span>
+                                       <span class="n">newshape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span><span class="p">))</span>
+
+        <span class="n">total_predictions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">predicted_outputs</span><span class="p">)</span>
+
+      <span class="n">total_predictions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">total_predictions</span><span class="p">)</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="n">batch_id</span> <span class="o">==</span> <span class="n">num_batches</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">batch_samples</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset_size</span> <span class="o">-</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">dataset_size</span><span class="p">)</span>
+      <span class="k">else</span><span class="p">:</span>
+        <span class="n">batch_samples</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_id</span> <span class="o">*</span> <span class="n">batch_size</span><span class="p">,</span> <span class="p">(</span><span class="n">batch_id</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">batch_size</span><span class="p">)</span>
+
+      <span class="n">batch_id</span> <span class="o">+=</span> <span class="mi">1</span>
+      <span class="n">predictions_mean</span><span class="p">[</span><span class="n">batch_samples</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">total_predictions</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+      <span class="n">predictions_std</span><span class="p">[</span><span class="n">batch_samples</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">total_predictions</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">predictions</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="n">predictions</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">predictions_mean</span>
+    <span class="n">predictions</span><span class="p">[</span><span class="s1">&#39;std&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">predictions_std</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">b_with_uncertainty</span><span class="p">):</span>
+      <span class="n">predictions</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">predictions</span></div>
+
+<div class="viewcode-block" id="CRN_Model.get_autoregressive_sequence_predictions"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.get_autoregressive_sequence_predictions">[docs]</a>  <span class="k">def</span> <span class="nf">get_autoregressive_sequence_predictions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">test_data</span><span class="p">,</span> <span class="n">b_with_uncertanty</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Estimate patient outcomes under a sequence of future treatments given their past history of treatment and</span>
+<span class="sd">       covariates. Can only be used for the decoder model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - test_data: dataset dictionary consisting of sequences of future treatments for which outcomes are estimated.</span>
+<span class="sd">      - projection_horizon: number of timesteps in the future for estimating the patient outcomes.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - predicted_outputs: counterfactual outcomes for a sequence of future treatments.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">encoder_output</span> <span class="o">=</span> <span class="n">test_data</span><span class="p">[</span><span class="s1">&#39;encoder_output&#39;</span><span class="p">]</span>
+    <span class="n">current_treatments</span> <span class="o">=</span> <span class="n">test_data</span><span class="p">[</span><span class="s1">&#39;current_treatments&#39;</span><span class="p">]</span>
+    <span class="n">previous_treatments</span> <span class="o">=</span> <span class="n">test_data</span><span class="p">[</span><span class="s1">&#39;previous_treatments&#39;</span><span class="p">]</span>
+    <span class="n">init_states</span> <span class="o">=</span> <span class="n">test_data</span><span class="p">[</span><span class="s1">&#39;init_states&#39;</span><span class="p">]</span>
+
+    <span class="n">projection_horizon</span> <span class="o">=</span> <span class="n">current_treatments</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">num_patient_points</span> <span class="o">=</span> <span class="n">encoder_output</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">current_dataset</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_patient_points</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">,</span>
+                                                            <span class="n">encoder_output</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;previous_treatments&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_patient_points</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">,</span>
+                                                             <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">))</span>
+    <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;current_treatments&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_patient_points</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">,</span>
+                                                            <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">))</span>
+    <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;active_entries&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_patient_points</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;init_state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_patient_points</span><span class="p">,</span> <span class="n">init_states</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+
+    <span class="n">predicted_outputs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="n">predicted_outputs</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_patient_points</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span><span class="p">))</span>
+    <span class="n">predicted_outputs</span><span class="p">[</span><span class="s1">&#39;std&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_patient_points</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span><span class="p">))</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_patient_points</span><span class="p">):</span>
+      <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;init_state&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">init_states</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+      <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">encoder_output</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+      <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;previous_treatments&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">previous_treatments</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+      <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;current_treatments&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">current_treatments</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">projection_horizon</span><span class="p">):</span>
+      <span class="n">predictions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_predictions</span><span class="p">(</span><span class="n">current_dataset</span><span class="p">,</span> <span class="n">b_with_uncertainty</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+      <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_patient_points</span><span class="p">):</span>
+        <span class="n">predicted_outputs</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span><span class="p">]</span>
+        <span class="n">predicted_outputs</span><span class="p">[</span><span class="s1">&#39;std&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="s1">&#39;std&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">t</span> <span class="o">&lt;</span> <span class="n">projection_horizon</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+          <span class="n">current_dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">test_data</span><span class="p">[</span><span class="s1">&#39;predicted_outcomes&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">predicted_outputs</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">b_with_uncertanty</span><span class="p">):</span>
+      <span class="n">predicted_outputs</span> <span class="o">=</span> <span class="n">predicted_outputs</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">predicted_outputs</span></div>
+
+<div class="viewcode-block" id="CRN_Model.compute_loss_treatments_one_hot"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.compute_loss_treatments_one_hot">[docs]</a>  <span class="k">def</span> <span class="nf">compute_loss_treatments_one_hot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target_treatments</span><span class="p">,</span> <span class="n">treatment_predictions</span><span class="p">,</span> <span class="n">active_entries</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Computes cross-entropy loss for treatment prediction.&quot;&quot;&quot;</span>
+    <span class="n">treatment_predictions</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">treatment_predictions</span><span class="p">,</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_treatments</span><span class="p">])</span>
+    <span class="n">cross_entropy_loss</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span>
+      <span class="p">(</span><span class="o">-</span> <span class="n">target_treatments</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">treatment_predictions</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">))</span> <span class="o">*</span> <span class="n">active_entries</span><span class="p">)</span> \
+                         <span class="o">/</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">active_entries</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">cross_entropy_loss</span></div>
+
+<div class="viewcode-block" id="CRN_Model.compute_loss_predictions"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.compute_loss_predictions">[docs]</a>  <span class="k">def</span> <span class="nf">compute_loss_predictions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">predictions</span><span class="p">,</span> <span class="n">active_entries</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Computes mean squared error loss for outcome prediction.&quot;&quot;&quot;</span>
+    <span class="n">predictions</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">predictions</span><span class="p">,</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sequence_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_outputs</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s1">&#39;regression&#39;</span><span class="p">:</span>
+      <span class="n">loss</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">outputs</span> <span class="o">-</span> <span class="n">predictions</span><span class="p">)</span> <span class="o">*</span> <span class="n">active_entries</span><span class="p">)</span> \
+             <span class="o">/</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">active_entries</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s1">&#39;classification&#39;</span><span class="p">:</span>
+      <span class="n">loss</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">((</span><span class="o">-</span> <span class="n">outputs</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">predictions</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">))</span> <span class="o">*</span> <span class="n">active_entries</span><span class="p">)</span> \
+             <span class="o">/</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">active_entries</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Unknown task&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">loss</span></div>
+
+<div class="viewcode-block" id="CRN_Model.compute_validation_loss"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.compute_validation_loss">[docs]</a>  <span class="k">def</span> <span class="nf">compute_validation_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">validation_dataset</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Computes validation losses for the validation dataset.&quot;&quot;&quot;</span>
+    <span class="n">validation_losses</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">validation_losses_outcomes</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">validation_losses_treatments</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">dataset_size</span> <span class="o">=</span> <span class="n">validation_dataset</span><span class="p">[</span><span class="s1">&#39;current_covariates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dataset_size</span> <span class="o">&gt;</span> <span class="mi">10000</span><span class="p">):</span>
+      <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">10000</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">batch_size</span> <span class="o">=</span> <span class="n">dataset_size</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">batch_current_covariates</span><span class="p">,</span> <span class="n">batch_previous_treatments</span><span class="p">,</span> <span class="n">batch_current_treatments</span><span class="p">,</span> <span class="n">batch_init_state</span><span class="p">,</span>
+         <span class="n">batch_outputs</span><span class="p">,</span> <span class="n">batch_active_entries</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gen_epoch</span><span class="p">(</span><span class="n">validation_dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">):</span>
+      <span class="n">feed_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_feed_dictionary</span><span class="p">(</span><span class="n">batch_current_covariates</span><span class="o">=</span><span class="n">batch_current_covariates</span><span class="p">,</span>
+                                             <span class="n">batch_previous_treatments</span><span class="o">=</span><span class="n">batch_previous_treatments</span><span class="p">,</span>
+                                             <span class="n">batch_current_treatments</span><span class="o">=</span><span class="n">batch_current_treatments</span><span class="p">,</span>
+                                             <span class="n">batch_init_state</span><span class="o">=</span><span class="n">batch_init_state</span><span class="p">,</span>
+                                             <span class="n">batch_active_entries</span><span class="o">=</span><span class="n">batch_active_entries</span><span class="p">,</span>
+                                             <span class="n">batch_outputs</span><span class="o">=</span><span class="n">batch_outputs</span><span class="p">)</span>
+
+      <span class="n">validation_loss</span><span class="p">,</span> <span class="n">validation_loss_outcomes</span><span class="p">,</span> <span class="n">validation_loss_treatments</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+        <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_outcomes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_treatments</span><span class="p">],</span>
+        <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_dict</span><span class="p">)</span>
+
+      <span class="n">validation_losses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">validation_loss</span><span class="p">)</span>
+      <span class="n">validation_losses_outcomes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">validation_loss_outcomes</span><span class="p">)</span>
+      <span class="n">validation_losses_treatments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">validation_loss_treatments</span><span class="p">)</span>
+
+    <span class="n">validation_loss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">validation_losses</span><span class="p">))</span>
+    <span class="n">validation_loss_outcomes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">validation_losses_outcomes</span><span class="p">))</span>
+    <span class="n">validation_loss_treatments</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">validation_losses_treatments</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">validation_loss</span><span class="p">,</span> <span class="n">validation_loss_outcomes</span><span class="p">,</span> <span class="n">validation_loss_treatments</span></div>
+
+<div class="viewcode-block" id="CRN_Model.save_network"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.save_network">[docs]</a>  <span class="k">def</span> <span class="nf">save_network</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tf_session</span><span class="p">,</span> <span class="n">model_dir</span><span class="p">,</span> <span class="n">checkpoint_name</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Save trained network.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - tf_session: TensorFlow session.</span>
+<span class="sd">      - model_dir: directory where to save the model.</span>
+<span class="sd">      - checkpoint_name: saved model name.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">saver</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Saver</span><span class="p">(</span><span class="n">max_to_keep</span><span class="o">=</span><span class="mi">100000</span><span class="p">)</span>
+    <span class="nb">vars</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">tf</span><span class="o">.</span><span class="n">global_variables</span><span class="p">():</span>
+      <span class="nb">vars</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">get_shape</span><span class="p">()</span><span class="o">.</span><span class="n">as_list</span><span class="p">())</span>
+
+    <span class="n">save_path</span> <span class="o">=</span> <span class="n">saver</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">tf_session</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">model_dir</span><span class="p">,</span> <span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">.ckpt&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">checkpoint_name</span><span class="p">)))</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Model saved to: </span><span class="si">{0}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">save_path</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="CRN_Model.load_network"><a class="viewcode-back" href="../../../api.html#treatments.CRN_Model.load_network">[docs]</a>  <span class="k">def</span> <span class="nf">load_network</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tf_session</span><span class="p">,</span> <span class="n">model_dir</span><span class="p">,</span> <span class="n">checkpoint_name</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load trained network into a TensorFlow session.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      - tf_session: TensorFlow session.</span>
+<span class="sd">      - model_dir: directory with saved model.</span>
+<span class="sd">      - checkpoint_name: saved model name.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">load_path</span> <span class="o">=</span> \
+      <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">model_dir</span><span class="p">,</span> <span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">.ckpt&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">checkpoint_name</span><span class="p">))</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Restoring model from </span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">load_path</span><span class="p">))</span>
+
+    <span class="n">saver</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Saver</span><span class="p">()</span>
+    <span class="n">saver</span><span class="o">.</span><span class="n">restore</span><span class="p">(</span><span class="n">tf_session</span><span class="p">,</span> <span class="n">load_path</span><span class="p">)</span></div></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, ML-AIM
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

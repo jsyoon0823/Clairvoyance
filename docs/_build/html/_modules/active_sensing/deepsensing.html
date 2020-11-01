@@ -1,0 +1,393 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>active_sensing.deepsensing &mdash; Clairvoyance 0.1.dev0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> Clairvoyance
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1.dev0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">First steps</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/install.html">Installation guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/tutorial.html">Clairvoyance Tutorial</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Full API reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">Clairvoyance</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Clairvoyance</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>active_sensing.deepsensing</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for active_sensing.deepsensing</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Deep Sensing Implementation.</span>
+
+<span class="sd">Reference: J. Yoon, W. R. Zame, M. van der Schaar, </span>
+<span class="sd">&quot;Deep Sensing: Active Sensing using Multi-directional Recurrent Neural Networks,&quot; </span>
+<span class="sd">ICLR, 2018.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Necessary packages</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="k">import</span> <span class="n">tqdm</span>
+<span class="kn">from</span> <span class="nn">prediction</span> <span class="k">import</span> <span class="n">GeneralRNN</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+
+<span class="kn">from</span> <span class="nn">base</span> <span class="k">import</span> <span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">PredictorMixin</span>
+
+
+<div class="viewcode-block" id="DeepSensing"><a class="viewcode-back" href="../../api.html#active_sensing.DeepSensing">[docs]</a><span class="k">class</span> <span class="nc">DeepSensing</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">PredictorMixin</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Deep Sensing class.</span>
+<span class="sd">    </span>
+<span class="sd">  Attributes:</span>
+<span class="sd">    - model_parameters: predictive model parameters (including h_dim, etc.)</span>
+<span class="sd">    - task: classification or regression</span>
+<span class="sd">  &quot;&quot;&quot;</span>
+  
+  <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_parameters</span><span class="p">,</span> <span class="n">task</span><span class="p">):</span>
+
+    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+    
+    <span class="bp">self</span><span class="o">.</span><span class="n">model_parameters</span> <span class="o">=</span> <span class="n">model_parameters</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">=</span> <span class="n">task</span>
+    
+    <span class="c1"># Predictive model with original label</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">pred_class</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">pred_model</span> <span class="o">=</span> <span class="kc">None</span>    
+    
+    <span class="c1"># Deep sensing models</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">deep_sensing_class</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">deep_sensing_model</span> <span class="o">=</span> <span class="kc">None</span>
+  
+<div class="viewcode-block" id="DeepSensing.model_train"><a class="viewcode-back" href="../../api.html#active_sensing.DeepSensing.model_train">[docs]</a>  <span class="k">def</span> <span class="nf">model_train</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">model_parameters</span><span class="p">,</span> <span class="n">task</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Train predictive model.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: training dataset</span>
+<span class="sd">      - model_parameters: parameters for training model</span>
+<span class="sd">      - task: classification or regression</span>
+<span class="sd">      </span>
+<span class="sd">    Returns:</span>
+<span class="sd">      - pred_class: class of predictive model</span>
+<span class="sd">      - pred_model: trained predictive model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">model_parameters</span><span class="p">[</span><span class="s1">&#39;model_type&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;rnn&#39;</span><span class="p">,</span><span class="s1">&#39;lstm&#39;</span><span class="p">,</span><span class="s1">&#39;gru&#39;</span><span class="p">]</span>
+    
+    <span class="c1"># Build model  </span>
+    <span class="n">pred_class</span> <span class="o">=</span> <span class="n">GeneralRNN</span><span class="p">(</span><span class="n">task</span><span class="o">=</span><span class="n">task</span><span class="p">)</span>
+    <span class="n">pred_class</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="o">**</span><span class="n">model_parameters</span><span class="p">)</span>
+  
+    <span class="c1"># Train the model</span>
+    <span class="n">pred_model</span> <span class="o">=</span> <span class="n">pred_class</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">pred_class</span><span class="p">,</span> <span class="n">pred_model</span></div>
+  
+  
+<div class="viewcode-block" id="DeepSensing.new_label_generation"><a class="viewcode-back" href="../../api.html#active_sensing.DeepSensing.new_label_generation">[docs]</a>  <span class="k">def</span> <span class="nf">new_label_generation</span> <span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">split</span> <span class="o">=</span> <span class="s1">&#39;all&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Label generation for deep sensing.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: training dataset</span>
+<span class="sd">      - split: use the entire data (&#39;all&#39;)</span>
+<span class="sd">      </span>
+<span class="sd">    Returns:</span>
+<span class="sd">      - y_tilde: new labels for training deep sensing model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+      
+    <span class="c1"># Only for the single label</span>
+    <span class="k">assert</span> <span class="n">dataset</span><span class="o">.</span><span class="n">label</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
+    
+    <span class="c1"># Get the features and predictions</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pred_class</span><span class="o">.</span><span class="n">_data_preprocess</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">fold</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">split</span> <span class="o">=</span> <span class="n">split</span><span class="p">)</span>
+    <span class="n">y_hat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pred_class</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">test_split</span> <span class="o">=</span> <span class="n">split</span><span class="p">)</span>
+    
+    <span class="c1"># Parameters</span>
+    <span class="n">no</span><span class="p">,</span> <span class="n">seq_len</span><span class="p">,</span> <span class="n">dim</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span>    
+    
+    <span class="c1"># For one-shot prediction</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_hat</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+      <span class="c1"># Output initialization     </span>
+      <span class="n">y_tilde</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="n">no</span><span class="p">,</span> <span class="n">dim</span><span class="p">])</span>
+      <span class="c1"># For each sample</span>
+      <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">no</span><span class="p">)):</span>        
+        <span class="c1"># Only reset the last features</span>
+        <span class="n">temp_x</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">temp_refer</span> <span class="o">=</span> <span class="n">temp_x</span><span class="p">[</span><span class="n">seq_len</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">temp_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">temp_x</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">seq_len</span><span class="p">,</span> <span class="n">dim</span><span class="p">])</span>
+        <span class="n">temp_x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">seq_len</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># For each dimensions</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dim</span><span class="p">):</span>
+          <span class="c1"># Restore original value for a certain feature</span>
+          <span class="n">temp_x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">seq_len</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">temp_refer</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>       
+          <span class="c1"># See the prediction in comparison to original prediction</span>
+          <span class="n">y_tilde</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pred_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">temp_x</span><span class="p">)</span> <span class="o">-</span> <span class="n">y_hat</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+          <span class="c1"># Restore the data</span>
+          <span class="n">temp_x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">seq_len</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    <span class="c1"># For online prediction      </span>
+    <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_hat</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+      <span class="c1"># Output initialization           </span>
+      <span class="n">y_tilde</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="n">no</span><span class="p">,</span> <span class="n">seq_len</span><span class="p">,</span> <span class="n">dim</span><span class="p">])</span>
+      <span class="c1"># For each sample      </span>
+      <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">no</span><span class="p">)):</span>     
+        <span class="c1"># Save the reference</span>
+        <span class="n">temp_refer</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="c1"># -1 padding</span>
+        <span class="n">temp_x</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="n">seq_len</span><span class="p">,</span> <span class="n">dim</span><span class="p">])</span>
+        <span class="n">temp_x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">seq_len</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># For each time-point      </span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">seq_len</span><span class="p">):</span>    
+          <span class="c1"># Set previous measurements</span>
+          <span class="n">temp_x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">seq_len</span><span class="o">-</span><span class="n">t</span><span class="p">):,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">temp_refer</span><span class="p">[:</span><span class="n">t</span><span class="p">,</span> <span class="p">:]</span>
+          <span class="c1"># For each feature</span>
+          <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dim</span><span class="p">):</span>          
+            <span class="c1"># Restore original value for a certain feature</span>
+            <span class="n">temp_x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">seq_len</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">temp_refer</span><span class="p">[</span><span class="n">t</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>    
+            <span class="c1"># See the prediction in comparison to original prediction    </span>
+            <span class="n">y_tilde</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> \
+            <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pred_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">temp_x</span><span class="p">)[</span><span class="mi">0</span><span class="p">,</span> <span class="n">seq_len</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">y_hat</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+            <span class="c1"># Restore the data</span>
+            <span class="n">temp_x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">seq_len</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+          
+    <span class="k">return</span> <span class="n">y_tilde</span></div>
+          
+  
+<div class="viewcode-block" id="DeepSensing.fit"><a class="viewcode-back" href="../../api.html#active_sensing.DeepSensing.fit">[docs]</a>  <span class="k">def</span> <span class="nf">fit</span> <span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Deep sensing model training.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: training dataset</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c1"># Train the model to the original label</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">pred_class</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pred_model</span> <span class="o">=</span> \
+    <span class="bp">self</span><span class="o">.</span><span class="n">model_train</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_parameters</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span><span class="p">)</span>
+    
+    <span class="c1"># New label generation</span>
+    <span class="n">new_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new_label_generation</span> <span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    
+    <span class="c1"># Replace original label to new label</span>
+    <span class="n">ori_y</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">label</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">label</span> <span class="o">=</span> <span class="n">new_y</span>
+    
+    <span class="c1"># Train deep sensing model</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">deep_sensing_class</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">deep_sensing_model</span> <span class="o">=</span> \
+    <span class="bp">self</span><span class="o">.</span><span class="n">model_train</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_parameters</span><span class="p">,</span> <span class="n">task</span> <span class="o">=</span> <span class="s1">&#39;regression&#39;</span><span class="p">)</span>
+    
+    <span class="c1"># Restore original label</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">label</span> <span class="o">=</span> <span class="n">ori_y</span></div>
+  
+  
+<div class="viewcode-block" id="DeepSensing.predict"><a class="viewcode-back" href="../../api.html#active_sensing.DeepSensing.predict">[docs]</a>  <span class="k">def</span> <span class="nf">predict</span> <span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">threshold</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Return the active sensing results.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - dataset: testing dataset</span>
+<span class="sd">      - threshold: selection threshold</span>
+<span class="sd">      </span>
+<span class="sd">    Returns:</span>
+<span class="sd">      - selection: selection results by deep sensing </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="n">y_hat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">deep_sensing_class</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">test_split</span> <span class="o">=</span> <span class="s1">&#39;test&#39;</span><span class="p">)</span>
+    <span class="n">selection</span> <span class="o">=</span> <span class="mi">1</span><span class="o">*</span><span class="p">(</span><span class="n">y_hat</span> <span class="o">&gt;</span> <span class="n">threshold</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">selection</span></div>
+  
+  
+<div class="viewcode-block" id="DeepSensing.save_model"><a class="viewcode-back" href="../../api.html#active_sensing.DeepSensing.save_model">[docs]</a>  <span class="k">def</span> <span class="nf">save_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Save the model to model_path</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - model_path: path of the saved model (it should be .h5)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">model_path</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span> <span class="o">==</span> <span class="s1">&#39;.h5&#39;</span>    
+    <span class="bp">self</span><span class="o">.</span><span class="n">deep_sensing_model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">model_path</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DeepSensing.load_model"><a class="viewcode-back" href="../../api.html#active_sensing.DeepSensing.load_model">[docs]</a>  <span class="k">def</span> <span class="nf">load_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load and return the model from model_path    </span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">      - model_path: path of the saved model (it should be .h5)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">model_path</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span> <span class="o">==</span> <span class="s1">&#39;.h5&#39;</span>
+    <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">model_path</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+    
+    <span class="n">loaded_model</span> <span class="o">=</span>  <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">load_model</span><span class="p">(</span><span class="n">model_path</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">loaded_model</span></div></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, ML-AIM
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,655 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>automl.model &mdash; Clairvoyance 0.1.dev0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> Clairvoyance
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1.dev0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">First steps</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/install.html">Installation guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/tutorial.html">Clairvoyance Tutorial</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Full API reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">Clairvoyance</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Clairvoyance</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>automl.model</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for automl.model</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;AutoML for sequence prediction</span>
+
+<span class="sd">Reference:  Y. Zhang, D. Jarrett, M. van der Schaar, &quot;Stepwise Model Selection for Sequence Prediction</span>
+<span class="sd">via Deep Kernel Learning,&quot; International Conference on Artificial Intelligence and Statistics (AISTATS), 2020.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">scipy.special</span> <span class="k">import</span> <span class="n">erfc</span>
+<span class="kn">from</span> <span class="nn">tensorflow.python.ops</span> <span class="k">import</span> <span class="n">rnn</span>
+
+<span class="kn">from</span> <span class="nn">automl._utils</span> <span class="k">import</span> <span class="n">init_random_uniform</span><span class="p">,</span> <span class="n">error_function</span><span class="p">,</span> <span class="n">model_eval</span><span class="p">,</span> <span class="n">get_opt_domain</span>
+
+
+<span class="k">def</span> <span class="nf">_get_quantiles</span><span class="p">(</span><span class="n">acquisition_par</span><span class="p">,</span> <span class="n">fmin</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+  <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+    <span class="n">s</span><span class="p">[</span><span class="n">s</span> <span class="o">&lt;</span> <span class="mf">1e-10</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1e-10</span>
+  <span class="k">elif</span> <span class="n">s</span> <span class="o">&lt;</span> <span class="mf">1e-10</span><span class="p">:</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="mf">1e-10</span>
+  <span class="n">u</span> <span class="o">=</span> <span class="p">(</span><span class="n">fmin</span> <span class="o">-</span> <span class="n">m</span> <span class="o">-</span> <span class="n">acquisition_par</span><span class="p">)</span> <span class="o">/</span> <span class="n">s</span>
+  <span class="n">phi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">u</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+  <span class="n">Phi</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">erfc</span><span class="p">(</span><span class="o">-</span><span class="n">u</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+  <span class="k">return</span> <span class="n">phi</span><span class="p">,</span> <span class="n">Phi</span><span class="p">,</span> <span class="n">u</span>
+
+
+<span class="k">def</span> <span class="nf">_compute_acq</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">fmin</span><span class="p">,</span> <span class="n">jitter</span><span class="p">):</span>
+  <span class="n">phi</span><span class="p">,</span> <span class="n">Phi</span><span class="p">,</span> <span class="n">u</span> <span class="o">=</span> <span class="n">_get_quantiles</span><span class="p">(</span><span class="n">jitter</span><span class="p">,</span> <span class="n">fmin</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span>
+  <span class="n">f_acqu</span> <span class="o">=</span> <span class="n">s</span> <span class="o">*</span> <span class="p">(</span><span class="n">u</span> <span class="o">*</span> <span class="n">Phi</span> <span class="o">+</span> <span class="n">phi</span><span class="p">)</span>
+  <span class="k">return</span> <span class="n">f_acqu</span>
+
+
+<span class="k">def</span> <span class="nf">_L_cholesky</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">DD</span><span class="p">):</span>
+  <span class="n">jitter</span> <span class="o">=</span> <span class="mf">1e-15</span>
+
+  <span class="n">L_matrix</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cholesky</span><span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="n">jitter</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">DD</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">))</span>
+  <span class="k">return</span> <span class="n">L_matrix</span>
+
+
+<div class="viewcode-block" id="AutoTS"><a class="viewcode-back" href="../../api.html#automl.AutoTS">[docs]</a><span class="k">class</span> <span class="nc">AutoTS</span><span class="p">:</span>
+  <span class="sd">&quot;&quot;&quot;Automated hyperparameter tuning for time series prediction.</span>
+
+<span class="sd">  References:</span>
+<span class="sd">      Y. Zhang, D. Jarrett, M. van der Schaar, &quot;Stepwise Model Selection for Sequence Prediction</span>
+<span class="sd">      via Deep Kernel Learning,&quot; International Conference on Artificial Intelligence and Statistics (AISTATS), 2020.</span>
+
+<span class="sd">  &quot;&quot;&quot;</span>
+  <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+               <span class="n">dataset</span><span class="p">,</span>
+               <span class="n">model</span><span class="p">,</span>
+               <span class="n">metric</span><span class="p">,</span>
+               <span class="n">rnn_hidden_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+               <span class="n">h_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+               <span class="n">num_h</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+               <span class="n">rho_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+               <span class="n">lr</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+               <span class="n">model_path</span><span class="o">=</span><span class="s1">&#39;tmp&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Args:</span>
+<span class="sd">      dataset: A :class:`~datasets.PandasDataset` object with *train and validation split defined*.</span>
+<span class="sd">      model: A predictor, for example, :class:`~prediction.GeneralRNN`.</span>
+<span class="sd">      metric: A :class:`~evaluation.BOMetric` object, which measures model performance.</span>
+<span class="sd">      rnn_hidden_size: (Advanced) RNN hidden size of the AutoML model.</span>
+<span class="sd">      h_size: (Advanced) Hidden size of the AutoML model.</span>
+<span class="sd">      num_h: (Advanced) Number of Hidden of the AutoML model.</span>
+<span class="sd">      rho_size: (Advanced) Rho size of the AutoML model.</span>
+<span class="sd">      lr: (Advanced) Learning rate of the AutoML model.</span>
+
+<span class="sd">    Notes:</span>
+<span class="sd">      The parameters marked &#39;Advanced&#39; is for developers only.</span>
+<span class="sd">      End users are recommended to accepted the default.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">      - All: All attributes of this class are private.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">data_x</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="n">BO_data</span><span class="p">,</span> <span class="n">lim_domain</span><span class="p">,</span> <span class="n">candidate_model</span> <span class="o">=</span> <span class="n">AutoTS</span><span class="o">.</span><span class="n">_init_eval</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">metric</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">model_path</span> <span class="o">=</span> <span class="n">model_path</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="n">metric</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">init_model</span> <span class="o">=</span> <span class="n">candidate_model</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">trainX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainY</span> <span class="o">=</span> <span class="n">BO_data</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">dims</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trainX</span><span class="p">)[</span><span class="mi">1</span><span class="p">],</span> <span class="n">num_h</span><span class="p">,</span> <span class="n">num_h</span><span class="p">,</span> <span class="n">num_h</span><span class="p">,</span> <span class="n">num_h</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bound_type</span> <span class="o">=</span> <span class="n">bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">rnn_hidden_size</span> <span class="o">=</span> <span class="n">rnn_hidden_size</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">num_example</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">data_x</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">data_x</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lim_domain</span> <span class="o">=</span> <span class="n">lim_domain</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">rho_size</span> <span class="o">=</span> <span class="n">rho_size</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">data_X</span> <span class="o">=</span> <span class="n">data_x</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dims</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lr</span> <span class="o">=</span> <span class="n">lr</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">feature_vector</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">ml_primal</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">ker_inv</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">mean</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">weight_deepset</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">bias_deepset</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">weight_bo</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">bias_bo</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">embed</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">beta</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lam</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">Y</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="n">hidden_size</span> <span class="o">=</span> <span class="p">[[</span><span class="bp">self</span><span class="o">.</span><span class="n">rnn_hidden_size</span><span class="p">,</span> <span class="n">h_size</span><span class="p">],</span>
+             <span class="p">[</span><span class="n">h_size</span><span class="p">,</span> <span class="n">h_size</span><span class="p">],</span>
+             <span class="p">[</span><span class="n">h_size</span><span class="p">,</span> <span class="n">h_size</span><span class="p">],</span>
+             <span class="p">[</span><span class="n">h_size</span><span class="p">,</span> <span class="n">h_size</span><span class="p">],</span>
+             <span class="p">[</span><span class="n">h_size</span><span class="p">,</span> <span class="n">rho_size</span><span class="p">]]</span>
+
+    <span class="c1"># create variables</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">hidden_size</span><span class="p">)):</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">_create_variable</span><span class="p">(</span><span class="s1">&#39;deepset/layer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="n">hidden_size</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">_create_variable</span><span class="p">(</span><span class="s1">&#39;deepset/layer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;biases&#39;</span><span class="p">,</span> <span class="n">hidden_size</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+      <span class="bp">self</span><span class="o">.</span><span class="n">weight_deepset</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_variable</span><span class="p">(</span><span class="s1">&#39;deepset/layer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">bias_deepset</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_variable</span><span class="p">(</span><span class="s1">&#39;deepset/layer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;biases&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">_create_variable</span><span class="p">(</span><span class="s1">&#39;bo_net/layer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]])</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">_create_variable</span><span class="p">(</span><span class="s1">&#39;bo_net/layer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;biases&#39;</span><span class="p">,</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]])</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">weight_bo</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_variable</span><span class="p">(</span><span class="s1">&#39;bo_net/layer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">bias_bo</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_variable</span><span class="p">(</span><span class="s1">&#39;bo_net/layer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;biases&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">):</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">_create_variable</span><span class="p">(</span><span class="s1">&#39;bo_net/task</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;lam&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">_create_variable</span><span class="p">(</span><span class="s1">&#39;bo_net/task</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;beta&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+      <span class="n">lam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_variable</span><span class="p">(</span><span class="s1">&#39;bo_net/task</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;lam&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">math</span><span class="o">.</span><span class="n">softplus</span><span class="p">(</span><span class="n">lam</span><span class="p">)</span>
+
+      <span class="n">beta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_variable</span><span class="p">(</span><span class="s1">&#39;bo_net/task</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;beta&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">math</span><span class="o">.</span><span class="n">softplus</span><span class="p">(</span><span class="n">beta</span><span class="p">)</span>
+
+      <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_build_model</span><span class="p">()</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">sess</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">global_variables_initializer</span><span class="p">())</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">):</span>
+      <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">variable_scope</span><span class="p">(</span><span class="s1">&#39;bo_net/task</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="n">var6</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">get_variable</span><span class="p">(</span><span class="s2">&quot;lam&quot;</span><span class="p">)</span>
+        <span class="n">var7</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">get_variable</span><span class="p">(</span><span class="s2">&quot;beta&quot;</span><span class="p">)</span>
+
+      <span class="n">var6</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">var6</span><span class="p">,</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">var6</span><span class="p">)))</span>
+      <span class="n">var7</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">var7</span><span class="p">,</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">var7</span><span class="p">)))</span>
+
+      <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">var6</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">var7</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AutoTS.training_loop"><a class="viewcode-back" href="../../api.html#automl.AutoTS.training_loop">[docs]</a>  <span class="k">def</span> <span class="nf">training_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_iter</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Run AutoML algorithm with initialized values.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      num_iter: Number of Bayesian Optimization iterations.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - List of models trained with different hyperparameters during the optimization.</span>
+<span class="sd">      - The performance of the models. Use this value to create a model ensemble with :class:`~prediction.AutoEnsemble`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span>
+    <span class="n">metric</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">metric</span>
+    <span class="n">model_list</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">init_model</span><span class="p">]</span>
+    <span class="n">rmse_global</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">rmse_wise</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">domain_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">lim_domain</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">num_iter</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="n">BO_output</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_iter</span><span class="p">):</span>
+
+      <span class="c1"># Optimize the BO network</span>
+      <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">5</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+          <span class="bp">self</span><span class="o">.</span><span class="n">_batch_optimization</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+          <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Covariance matrix not invertible.&quot;</span><span class="p">)</span>
+
+      <span class="c1"># Make a acquistion</span>
+      <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acquisition</span><span class="p">()</span>
+      <span class="n">param_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">domain_keys</span><span class="p">,</span> <span class="n">query</span><span class="p">))</span>
+
+      <span class="c1"># Evaluate the acquistion</span>
+      <span class="n">id_parts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_model</span><span class="o">.</span><span class="n">model_id</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+      <span class="n">id_parts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+      <span class="n">new_model_id</span> <span class="o">=</span> <span class="s1">&#39;_&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">id_parts</span><span class="p">)</span>
+
+      <span class="n">model_candidate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_model</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">new_model_id</span><span class="p">)</span>
+      <span class="n">model_candidate</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="o">**</span><span class="n">param_dict</span><span class="p">)</span>
+
+      <span class="n">obs</span> <span class="o">=</span> <span class="n">model_eval</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">model_candidate</span><span class="p">,</span> <span class="n">metric</span><span class="p">)</span>
+
+      <span class="n">model_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">model_candidate</span><span class="p">)</span>
+      <span class="c1"># Update the acquisition set</span>
+      <span class="n">BO_input</span><span class="p">,</span> <span class="n">BO_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_update_data</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">obs</span><span class="p">)</span>
+
+      <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Number of Function Evaluations:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+      <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;query point:&#39;</span><span class="p">,</span> <span class="n">query</span><span class="p">)</span>
+
+      <span class="c1"># Compute the minimum rmse obtained by global and step-wise model selection</span>
+      <span class="n">rmse1</span><span class="p">,</span> <span class="n">rmse2</span> <span class="o">=</span> <span class="n">error_function</span><span class="p">(</span><span class="n">BO_output</span><span class="p">)</span>
+
+      <span class="c1"># Compare the convergence plot of global and step-wise model selection</span>
+      <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;minimum loss of global model selection:&#39;</span><span class="p">,</span> <span class="n">rmse1</span><span class="p">)</span>
+      <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;minimum loss of step-wise model selection:&#39;</span><span class="p">,</span> <span class="n">rmse2</span><span class="p">)</span>
+
+      <span class="n">rmse_global</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rmse1</span><span class="p">)</span>
+      <span class="n">rmse_wise</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rmse2</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">model_list</span><span class="p">:</span>
+      <span class="n">m</span><span class="o">.</span><span class="n">save_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_path</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="n">m</span><span class="o">.</span><span class="n">model_id</span> <span class="o">+</span> <span class="s1">&#39;.h5&#39;</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_destroy_graph</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">model_list</span><span class="p">,</span> <span class="n">BO_output</span></div>
+
+  <span class="nd">@staticmethod</span>
+  <span class="k">def</span> <span class="nf">_init_eval</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">metric</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Provides initial values for AutoML algorithm.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      dataset: A :class:`~datasets.PandasDataSet` object with train and validation split defined.</span>
+<span class="sd">      model: A predictor, for example, :class:`~prediction.GeneralRNN`.</span>
+<span class="sd">      metric: A :class:`~evaluation.BOMetric` object, which measures model performance.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      - Data matrix used to initialize :class:`~automl.AutoTS`.</span>
+<span class="sd">      - Parameter bounds used to initialize :class:`~automl.AutoTS`.</span>
+<span class="sd">      - Initial values used to initialize :class:`~automl.AutoTS`.</span>
+<span class="sd">      - Parameter domains used to initialize :class:`~automl.AutoTS`.</span>
+<span class="sd">      - The initial model.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># get domain</span>
+    <span class="n">model_domain</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_hyperparameter_space</span><span class="p">()</span>
+    <span class="n">lim_domain</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">bounds</span> <span class="o">=</span> <span class="n">get_opt_domain</span><span class="p">(</span><span class="n">model_domain</span><span class="p">)</span>
+    <span class="n">domain_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">get_hyperparameter_space</span><span class="p">()]</span>
+
+    <span class="c1"># initial run</span>
+    <span class="n">list_domain</span> <span class="o">=</span> <span class="n">init_random_uniform</span><span class="p">(</span><span class="n">lim_domain</span><span class="p">,</span> <span class="n">n_points</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">param_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">domain_keys</span><span class="p">,</span> <span class="n">list_domain</span><span class="p">))</span>
+
+    <span class="n">candidate_model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">model_id</span> <span class="o">+</span> <span class="s1">&#39;bo_iter_0&#39;</span><span class="p">)</span>
+    <span class="n">candidate_model</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="o">**</span><span class="n">param_dict</span><span class="p">)</span>
+
+    <span class="n">obs</span> <span class="o">=</span> <span class="n">model_eval</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">candidate_model</span><span class="p">,</span> <span class="n">metric</span><span class="p">)</span>
+    <span class="n">BO_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">list_domain</span><span class="p">)[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="n">obs</span>
+
+    <span class="c1"># set input matrix</span>
+    <span class="n">seq_len</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">temporal_feature</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">dataset</span><span class="o">.</span><span class="n">problem</span> <span class="o">==</span> <span class="s1">&#39;one-shot&#39;</span><span class="p">:</span>
+      <span class="n">label</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">label</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">seq_len</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">label</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">label</span>
+
+    <span class="k">if</span> <span class="n">dataset</span><span class="o">.</span><span class="n">static_feature</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+      <span class="n">sf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">static_feature</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">seq_len</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+      <span class="n">data_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">dataset</span><span class="o">.</span><span class="n">temporal_feature</span><span class="p">,</span> <span class="n">sf</span><span class="p">,</span> <span class="n">label</span><span class="p">),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">data_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">dataset</span><span class="o">.</span><span class="n">temporal_feature</span><span class="p">,</span> <span class="n">label</span><span class="p">),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data_x</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="n">BO_data</span><span class="p">,</span> <span class="n">lim_domain</span><span class="p">,</span> <span class="n">candidate_model</span>
+
+
+  <span class="k">def</span> <span class="nf">_build_model</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">Y</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">])</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">N_sample</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">lstm_cell</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">LSTMCell</span><span class="p">(</span><span class="n">units</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rnn_hidden_size</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">segment_ids</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">])</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">rnn_dim_feature</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_X</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">rnn_input</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+                                 <span class="n">shape</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">num_example</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_dim_feature</span><span class="p">])</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="n">lstm_cell</span><span class="o">.</span><span class="n">get_initial_state</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_example</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">xx</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">unstack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnn_input</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">rnn_output</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">rnn</span><span class="o">.</span><span class="n">static_rnn</span><span class="p">(</span><span class="n">lstm_cell</span><span class="p">,</span> <span class="n">xx</span><span class="p">,</span> <span class="n">initial_state</span><span class="o">=</span><span class="n">state</span><span class="p">)</span>
+<span class="c1">#    rnn_output, state = tf.keras.layers.SimpleRNN(lstm_cell, return_state = True)(xx, initial_state=state)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">train_loss</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">YY</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">):</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">YY</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">step</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+      <span class="n">ss</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="n">rnn_output</span><span class="p">,</span> <span class="p">[</span><span class="n">step</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+      <span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deepset</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">ss</span><span class="p">))</span>
+
+      <span class="n">state_embedding</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)],</span> <span class="p">[</span><span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N_sample</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span> <span class="mi">1</span><span class="p">])</span>
+
+      <span class="bp">self</span><span class="o">.</span><span class="n">_bo_net</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">,</span> <span class="n">state_embedding</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+
+      <span class="bp">self</span><span class="o">.</span><span class="n">train_loss</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ml_primal</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">opt</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">AdamOptimizer</span><span class="p">(</span><span class="n">learning_rate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lr</span><span class="p">)</span><span class="o">.</span><span class="n">minimize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">train_loss</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="nf">_batch_optimization</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_iter</span><span class="o">=</span><span class="mi">500</span><span class="p">):</span>
+
+    <span class="n">num_step</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_iter</span><span class="p">):</span>
+      <span class="n">rr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="n">num_step</span><span class="p">)</span>
+      <span class="n">ss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">)</span>
+      <span class="n">ss</span><span class="p">[</span><span class="n">rr</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+      <span class="n">feed_input</span> <span class="o">=</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_sample</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">trainX</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
+              <span class="bp">self</span><span class="o">.</span><span class="n">segment_ids</span><span class="p">:</span> <span class="n">ss</span><span class="p">}</span>
+
+      <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">opt</span><span class="p">,</span> <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_input</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="nf">_update_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">obs</span><span class="p">):</span>
+
+    <span class="n">query</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">trainX</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">trainX</span><span class="p">,</span> <span class="n">query</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">trainY</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">trainY</span><span class="p">,</span> <span class="n">obs</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainY</span>
+
+  <span class="k">def</span> <span class="nf">_destroy_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">tf</span><span class="o">.</span><span class="n">reset_default_graph</span><span class="p">()</span>
+
+  <span class="k">def</span> <span class="nf">_get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">mdict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">scope_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+      <span class="n">w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
+      <span class="n">mdict</span><span class="p">[</span><span class="n">scope_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">w</span>
+    <span class="k">return</span> <span class="n">mdict</span>
+
+  <span class="k">def</span> <span class="nf">_create_variable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scope</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">trainable</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+
+    <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">variable_scope</span><span class="p">(</span><span class="n">scope</span><span class="p">):</span>
+      <span class="n">w</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">get_variable</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">trainable</span><span class="o">=</span><span class="n">trainable</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">w</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">w</span>
+
+  <span class="k">def</span> <span class="nf">_get_variable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scope</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">trainable</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">variable_scope</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+      <span class="n">w</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">compat</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">get_variable</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">trainable</span><span class="o">=</span><span class="n">trainable</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">w</span>
+
+  <span class="k">def</span> <span class="nf">_deepset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hidden_vec</span><span class="p">):</span>
+
+    <span class="n">Z0</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">hidden_vec</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_deepset</span><span class="p">[</span><span class="s1">&#39;0&#39;</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_deepset</span><span class="p">[</span><span class="s1">&#39;0&#39;</span><span class="p">])</span>
+    <span class="n">A0</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">Z0</span><span class="p">)</span>
+
+    <span class="n">Z1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">A0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_deepset</span><span class="p">[</span><span class="s1">&#39;1&#39;</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_deepset</span><span class="p">[</span><span class="s1">&#39;1&#39;</span><span class="p">])</span>
+    <span class="n">A1</span> <span class="o">=</span> <span class="n">Z1</span>
+
+    <span class="n">mean_emb</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="n">A1</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">mean_emb</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">mean_emb</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">Z2</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">mean_emb</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_deepset</span><span class="p">[</span><span class="s1">&#39;2&#39;</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_deepset</span><span class="p">[</span><span class="s1">&#39;2&#39;</span><span class="p">])</span>
+    <span class="n">A2</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">Z2</span><span class="p">)</span>
+
+    <span class="n">Z3</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">A2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_deepset</span><span class="p">[</span><span class="s1">&#39;3&#39;</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_deepset</span><span class="p">[</span><span class="s1">&#39;3&#39;</span><span class="p">])</span>
+    <span class="n">A3</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">Z3</span><span class="p">)</span>
+
+    <span class="n">Z4</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">A3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_deepset</span><span class="p">[</span><span class="s1">&#39;4&#39;</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_deepset</span><span class="p">[</span><span class="s1">&#39;4&#39;</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">Z4</span>
+
+  <span class="k">def</span> <span class="nf">_bo_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feature_vector</span><span class="p">,</span> <span class="n">state_embedding</span><span class="p">,</span> <span class="n">step</span><span class="p">):</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+      <span class="n">feature_vector</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">feature_vector</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_bo</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)])</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_bo</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)])</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">feature_vector</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">state_embedding</span><span class="p">,</span> <span class="n">feature_vector</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">DD</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_vector</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)])[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">phi_phi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_vector</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]),</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">feature_vector</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)])</span>
+
+    <span class="n">Ker</span> <span class="o">=</span> <span class="n">phi_phi</span> <span class="o">+</span> <span class="n">tf</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">DD</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="n">L_matrix</span> <span class="o">=</span> <span class="n">_L_cholesky</span><span class="p">(</span><span class="n">Ker</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">DD</span><span class="p">)</span>
+
+    <span class="n">L_inv_reduce</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">triangular_solve</span><span class="p">(</span><span class="n">L_matrix</span><span class="p">,</span> <span class="n">rhs</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">DD</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">))</span>
+
+    <span class="n">L_y</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">L_inv_reduce</span><span class="p">,</span> <span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_vector</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">YY</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]))</span>
+
+    <span class="n">term1</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">*</span> <span class="p">(</span>
+          <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">YY</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]))</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">L_y</span><span class="p">)))</span>
+
+    <span class="n">term2</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">diag_part</span><span class="p">(</span><span class="n">L_matrix</span><span class="p">)))</span>
+
+    <span class="n">term3</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_sample</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)])</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">ml_primal</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">=</span> <span class="n">term1</span> <span class="o">+</span> <span class="n">term2</span> <span class="o">+</span> <span class="n">term3</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">ker_inv</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">L_inv_reduce</span><span class="p">),</span> <span class="n">L_inv_reduce</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">mean</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">L_inv_reduce</span><span class="p">),</span> <span class="n">L_y</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="nf">_acquisition</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+    <span class="n">domain_l</span> <span class="o">=</span> <span class="n">init_random_uniform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lim_domain</span><span class="p">)</span>
+
+    <span class="n">mean_list</span><span class="p">,</span> <span class="n">XX_inv_list</span><span class="p">,</span> <span class="n">featureX_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">mean</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ker_inv</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">feature_vector</span><span class="p">],</span>
+                                <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainY</span><span class="p">,</span>
+                                     <span class="bp">self</span><span class="o">.</span><span class="n">N_sample</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">trainX</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
+                                     <span class="bp">self</span><span class="o">.</span><span class="n">segment_ids</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">)})</span>
+
+    <span class="n">test_X_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_vector</span><span class="p">,</span>
+                  <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="n">domain_l</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_sample</span><span class="p">:</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">domain_l</span><span class="p">)[</span><span class="mi">0</span><span class="p">]],</span>
+                         <span class="bp">self</span><span class="o">.</span><span class="n">segment_ids</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">)})</span>
+
+    <span class="n">max_ei</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">)</span>
+    <span class="n">index_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">ei_total</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">):</span>
+
+      <span class="n">lam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)])</span>
+
+      <span class="n">mean</span><span class="p">,</span> <span class="n">XX_inv</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">test_X</span> <span class="o">=</span> <span class="n">mean_list</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)],</span> <span class="n">XX_inv_list</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)],</span> <span class="n">featureX_list</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)],</span> <span class="n">test_X_list</span><span class="p">[</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span>
+
+      <span class="n">s</span> <span class="o">=</span> <span class="p">[]</span>
+      <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">test_X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">test_X</span><span class="p">[[</span><span class="n">row</span><span class="p">],</span> <span class="p">:]</span>
+        <span class="n">s_save</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="n">lam</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">XX_inv</span><span class="p">),</span> <span class="n">x</span><span class="o">.</span><span class="n">T</span><span class="p">))</span> <span class="o">**</span> <span class="mf">0.5</span>
+        <span class="n">s</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_save</span><span class="p">)</span>
+
+      <span class="n">prediction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">test_X</span><span class="p">,</span> <span class="n">mean</span><span class="p">)</span>
+
+      <span class="n">sig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="p">(</span><span class="n">test_X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">))</span>
+
+      <span class="n">ei</span> <span class="o">=</span> <span class="n">_compute_acq</span><span class="p">(</span><span class="n">prediction</span><span class="p">,</span> <span class="n">sig</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trainY</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]),</span> <span class="mf">0.01</span><span class="p">)</span>
+
+      <span class="n">ei</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">ei</span><span class="p">)</span>
+
+      <span class="n">ei_total</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ei</span><span class="p">)</span>
+
+      <span class="n">anchor_index</span> <span class="o">=</span> <span class="n">ei</span><span class="o">.</span><span class="n">argsort</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+      <span class="n">max_ei</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">ei</span><span class="p">)</span>
+
+      <span class="n">index_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">anchor_index</span><span class="p">)</span>
+
+    <span class="n">prob</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">max_ei</span> <span class="o">+</span> <span class="mf">1e-15</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">max_ei</span> <span class="o">+</span> <span class="mf">1e-15</span><span class="p">))</span>
+
+    <span class="n">prob</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span>
+
+    <span class="n">prob</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span>
+
+    <span class="n">final_point</span> <span class="o">=</span> <span class="n">domain_l</span><span class="p">[</span><span class="n">index_list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">multinomial</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">prob</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.1</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]]</span>
+
+    <span class="k">return</span> <span class="n">final_point</span></div>
+
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, ML-AIM
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
