@@ -1,6 +1,6 @@
 # Codebase for "Clairvoyance: a Unified, End-to-End AutoML Pipeline for Medical Time Series"
 
-![Block diagram of Clairvoyance](tutorial/figure/clairvoyance_logo.png){:height="50px" width="200px"}
+![Block diagram of Clairvoyance](tutorial/figure/clairvoyance_logo.png){height="50px" width="200px"}
 
 Authors: ML-AIM (www.vanderschaar-lab.com)
 
